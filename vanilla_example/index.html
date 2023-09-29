@@ -1,0 +1,168 @@
+<html>
+<!-- This HTML file is part of the reference vanilla HTML/CSS/JS implementation provided with TennisJS -- see https://github.com/mattriffle/tennisjs -->
+
+<head>
+  <title>TennisJS Example in Vanilla Javascript</title>
+  <script type="text/javascript" src="../js/tennis.js"></script>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎾</text></svg>">
+</head>
+
+<body>
+
+  <h1>&#127934; TennisJS</h1>
+
+  <div id="warning" class="warning"></div>
+
+  <p />
+
+  <div id="get_players">
+    <table>
+      <tr>
+        <td>Player 1: <input id="p1_name" type="text" size="40"><br /><span class="sm_text">(Serves First)</span></td>
+      </tr>
+      <tr>
+        <td>Player 2: <input id="p2_name" type="text" size="40"></td>
+      </tr>
+      <tr>
+        <td>
+          Number of Sets:
+          <select id="num_sets" class="sbox">
+            <option value="1">1</option>
+            <option value="3" selected>3</option>
+            <option value="5">5</option>
+          </select>
+        </td>
+      </tr>
+      <tr>
+        <td><button id="start_game" onclick="init_match()">Start Match</button></td>
+      </tr>
+    </table>
+  </div>
+  <div id="winner_table" class="winner_table" style="display:none">
+    <table>
+      <thead>
+        <tr>
+          <td colspan="2">
+            We have a winner!
+          </td>
+        </tr>
+      </thead>
+      <tr>
+        <td>
+          Winner:
+        </td>
+        <td><span id="winner_name"></span>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          Score:
+        </td>
+        <td>
+          <span id="winner_score"></span>
+        </td>
+      </tr>
+    </table>
+    <br />
+  </div>
+  <div id="score_table" style="display:none">
+    <table>
+      <thead>
+        <tr>
+          <td>Player</td>
+          <td>Sets</td>
+          <td>Games</td>
+          <td>Current <span id="game_type"></span></td>
+          </td>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><span id="serving1"></span><span id="player1"></span></td>
+          <td><span id="sets1"></span></td>
+          <td><span id="games1"></span></td>
+          <td><span id="score1"></span></td>
+        </tr>
+        <tr>
+          <td><span id="serving2"></span><span id="player2"></span></td>
+          <td><span id="sets2"></span></td>
+          <td><span id="games2"></span></td>
+          <td><span id="score2"></span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <br />
+
+  <div id="undo_serve" style="display:none">
+    <table>
+      <tr>
+        <td>Service:</td>
+        <td><button id="fault_button" onclick="add_fault()">FAULT</button></td>
+      </tr>
+    </table>
+    <br />
+  </div>
+
+  <div id="player1_buttons" style="display:none">
+    <table>
+      <tr>
+        <td>
+          <h3>Score Point for <span id="player1b"></span></h3>
+          <span id="p_serving1">
+            <button onclick="score_it(1,ACE)">Ace</button>
+            <button onclick="score_it(1,SERVICE_WINNER)">Service Winner</button>
+          </span>
+          <span id="p_receiving1">
+            <button onclick="score_it(1,RETURN_WINNER)">Return Winner</button>
+          </span>
+          <button onclick="score_it(1,WINNER)">Winner</button>
+          <button onclick="score_it(1,UNFORCED_ERROR)">Opponent Unforced</button>
+          <button onclick="score_it(1,REGULAR)">Other</button>
+        </td>
+      </tr>
+    </table>
+    <br />
+  </div>
+
+  <div id="player2_buttons" style="display:none">
+    <table>
+      <tr>
+        <td>
+          <h3>Score Point for <span id="player2b"></span></h3>
+          <span id="p_serving2">
+            <button onclick="score_it(2,ACE)">Ace</button>
+            <button onclick="score_it(2,SERVICE_WINNER)">Service Winner</button>
+          </span>
+          <div id="p_receiving2">
+            <button onclick="score_it(2,RETURN_WINNER)">Return Winner</button>
+          </div>
+          <button onclick="score_it(2,WINNER)">Winner</button>
+          <button onclick="score_it(2,UNFORCED_ERROR)">Opponent Unforced</button>
+          <button onclick="score_it(2,REGULAR)">Other</button>
+        </td>
+      </tr>
+    </table>
+    <br />
+  </div>
+
+  <div id="new_match" style="display:none">
+    <table>
+      <tr>
+        <td><button onclick="remove_it()">UNDO LAST POINT</button></td>
+        <td><button id="reset_button" onclick="reset_match()">Start New Match</button></td>
+      </tr>
+    </table>
+  </div>
+  <p />
+
+  <span id="wholeobj"></span>
+
+  <script type="text/javascript" src="js/vanilla_example.js"></script>
+</body>
+
+</html>
+<!--  Remember Jim Courier?  How about Michael Chang?  Jennifer Capriati? Monica Seles? Arantxa Sánchez Vicario? -->
