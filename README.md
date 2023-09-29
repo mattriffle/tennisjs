@@ -2,7 +2,7 @@
 
 ## What is it?
 
-A vanilla Javascript library for scoring tennis matches, keeping track of each point and how it was one, as well as various statistics.  It provides functions
+A vanilla Javascript library for scoring tennis matches, keeping track of each point and how it was won, as well as various statistics.  It provides functions
 enabling the front-end to use either LocalStorage API or a back-end system for persistence.
 
 ## Where can I find it?
