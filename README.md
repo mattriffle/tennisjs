@@ -15,12 +15,12 @@ https://tennisjs.org
 
 -or-
 
-`npm install @mattriffle/tennisjs`
+`npm install tennisjs`
 
 ## Basic Usage
 
 ```javascript
-import { TennisMatch, PointOutcomes } from "@mattriffle/tennisjs";
+import { TennisMatch, PointOutcomes } from "tennisjs";
 
 // Create a new best-of-3 sets match
 const match = new TennisMatch("Player 1", "Player 2", 3);
@@ -47,7 +47,7 @@ match.removePoint();
 To resume a match, use the static `TennisMatch.load()` method. By default, it will try to load the match from `localStorage`.
 
 ```javascript
-import { TennisMatch } from "@mattriffle/tennisjs";
+import { TennisMatch } from "tennisjs";
 
 const resumedMatch = TennisMatch.load();
 
@@ -63,7 +63,7 @@ if (resumedMatch) {
 You can provide a callback function to the constructor to override the default `localStorage` behavior. This is useful for saving the match state to a different storage, like a back-end server.
 
 ```javascript
-import { TennisMatch } from "@mattriffle/tennisjs";
+import { TennisMatch } from "tennisjs";
 
 const customSave = (match) => {
     // Example: Send the match state to a server
@@ -82,7 +82,7 @@ match.scorePoint(1);
 You can also provide a custom loader function to `TennisMatch.load()` to retrieve the saved match from another source.
 
 ```javascript
-import { TennisMatch } from "@mattriffle/tennisjs";
+import { TennisMatch } from "tennisjs";
 
 const customLoader = () => {
     // Example: retrieve the match state from a variable or async source
