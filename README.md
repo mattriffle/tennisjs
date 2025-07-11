@@ -1,10 +1,8 @@
-<p align="center">
-  <a href="https://github.com/mattriffle/tennisjs-vue">
+<p>
+  <a href="https://github.com/mattriffle/tennisjs">
     <img src="https://raw.githubusercontent.com/mattriffle/tennisjs-vue/main/src/assets/tennisjs.png" alt="tennisjs-vue logo" width="200"/>
   </a>
 </p>
-
-# TennisJS
 
 ## What is it?
 
@@ -21,6 +19,10 @@ https://tennisjs.org
 -or-
 
 `npm install tennisjs`
+
+## Is there an FE available?
+
+Find TennisJS Vue at: https://github.com/mattriffle/tennisjs-vue/
 
 ## Basic Usage
 
@@ -101,10 +103,6 @@ const match = TennisMatch.load(customLoader);
 ## Where to send bugs?
 
 https://github.com/mattriffle/tennisjs/issues
-
-## What else is available?
-
-A Vue 3 FE utilizing the library is planned for the near future.
 
 ## Didn't you used to brag about this library being vanilla Javascript?
 
