@@ -1,9 +1,14 @@
+<p align="center">
+  <a href="https://github.com/mattriffle/tennisjs-vue">
+    <img src="https://raw.githubusercontent.com/mattriffle/tennisjs-vue/main/src/assets/tennisjs.png" alt="tennisjs-vue logo" width="200"/>
+  </a>
+</p>
+
 # TennisJS
 
 ## What is it?
 
-A Typescript package for scoring tennis matches, keeping track of each point and how it was won, as well as various statistics. It provides functions
-enabling the front-end to use either LocalStorage API or a back-end system for persistence.
+A Typescript package for scoring tennis matches, keeping track of each point and how it was won, as well as various statistics. It provides functions enabling the front-end to use either LocalStorage API or a back-end system for persistence.
 
 ## Where can I find it?
 
@@ -52,9 +57,9 @@ import { TennisMatch } from "tennisjs";
 const resumedMatch = TennisMatch.load();
 
 if (resumedMatch) {
-    console.log("Match resumed!", resumedMatch.matchSummary());
+  console.log("Match resumed!", resumedMatch.matchSummary());
 } else {
-    console.log("No saved match found.");
+  console.log("No saved match found.");
 }
 ```
 
@@ -66,12 +71,12 @@ You can provide a callback function to the constructor to override the default `
 import { TennisMatch } from "tennisjs";
 
 const customSave = (match) => {
-    // Example: Send the match state to a server
-    // fetch('/api/save-match', {
-    //   method: 'POST',
-    //   body: JSON.stringify(match),
-    // });
-    console.log("Match state saved!", match);
+  // Example: Send the match state to a server
+  // fetch('/api/save-match', {
+  //   method: 'POST',
+  //   body: JSON.stringify(match),
+  // });
+  console.log("Match state saved!", match);
 };
 
 const match = new TennisMatch("Player 1", "Player 2", 3, customSave);
@@ -85,9 +90,9 @@ You can also provide a custom loader function to `TennisMatch.load()` to retriev
 import { TennisMatch } from "tennisjs";
 
 const customLoader = () => {
-    // Example: retrieve the match state from a variable or async source
-    // return mySavedMatchJSON;
-    return null;
+  // Example: retrieve the match state from a variable or async source
+  // return mySavedMatchJSON;
+  return null;
 };
 
 const match = TennisMatch.load(customLoader);
