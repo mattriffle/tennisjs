@@ -1,8 +1,11 @@
 import {
   PlayerNum,
+  TeamNum,
   PointOutcomes,
   ScoreObj,
   NumericScoreObj,
+  Player,
+  PlayerIdentifier,
 } from "./types.js";
 import { Point } from "./Point.js";
 
@@ -10,8 +13,9 @@ import { Point } from "./Point.js";
  * Represents a single game in a tennis set.
  */
 export class Game {
-  server: PlayerNum;
-  winner: PlayerNum | 0;
+  server: PlayerNum | Player;
+  serverTeam?: TeamNum;
+  winner: PlayerNum | TeamNum | 0;
   score: ScoreObj;
   iscore: NumericScoreObj;
   points: Point[];
@@ -20,8 +24,15 @@ export class Game {
    * Creates a new Game.
    * @param server The player serving the game.
    */
-  constructor(server: PlayerNum) {
-    this.server = server;
+  constructor(server: PlayerNum | Player) {
+    if (typeof server === "number") {
+      // Singles
+      this.server = server;
+    } else {
+      // Doubles
+      this.server = server;
+      this.serverTeam = server.team;
+    }
     this.winner = 0;
     this.score = { 1: 0, 2: 0 };
     this.iscore = { 1: 0, 2: 0 };
@@ -45,19 +56,31 @@ export class Game {
 
   /**
    * Records a point for a player in the current game.
-   * @param winner The player who won the point.
+   * @param winner The player/team who won the point.
    * @param how The way the point was won.
    * @param fault The number of faults on the serve.
+   * @param scoringPlayer The specific player who scored (for doubles).
    * @returns 1 if the point was scored, 0 if the game was already won.
    */
   scorePoint(
-    winner: PlayerNum,
+    winner: PlayerNum | TeamNum,
     how: PointOutcomes = PointOutcomes.REGULAR,
-    fault: number = 0
+    fault: number = 0,
+    scoringPlayer?: PlayerIdentifier
   ): number {
     if (this.winner) return 0;
-    const pointObject = new Point(winner, how, fault);
-    this.iscore[winner]++;
+
+    // Create point with individual player tracking for doubles
+    const pointObject = new Point(
+      winner,
+      how,
+      fault,
+      this.server,
+      scoringPlayer
+    );
+
+    // Update score - use winner directly as it maps to team number in doubles
+    this.iscore[winner as PlayerNum]++;
     this.points.push(pointObject);
     this.updateGame();
     return 1;
@@ -78,34 +101,50 @@ export class Game {
    * This is called internally after a point is scored or removed.
    */
   updateGame(): void {
-    let leader: PlayerNum = 1;
-    let loser: PlayerNum = 2;
+    let leader: PlayerNum | TeamNum = 1;
+    let loser: PlayerNum | TeamNum = 2;
     this.winner = 0;
     if (this.iscore[2] > this.iscore[1]) {
       leader = 2;
       loser = 1;
     }
 
-    if (this.iscore[leader] === 3 && this.iscore[loser] === 3) {
-      this.score[leader] = "DEUCE";
-      this.score[loser] = "DEUCE";
+    if (
+      this.iscore[leader as PlayerNum] === 3 &&
+      this.iscore[loser as PlayerNum] === 3
+    ) {
+      this.score[leader as PlayerNum] = "DEUCE";
+      this.score[loser as PlayerNum] = "DEUCE";
       return;
     }
 
-    if (this.iscore[leader] >= 4) {
-      this.score[leader] = "-";
-      this.score[loser] = "-";
-      if (this.iscore[leader] - this.iscore[loser] > 1) {
+    if (this.iscore[leader as PlayerNum] >= 4) {
+      this.score[leader as PlayerNum] = "-";
+      this.score[loser as PlayerNum] = "-";
+      if (
+        this.iscore[leader as PlayerNum] - this.iscore[loser as PlayerNum] >
+        1
+      ) {
         this.winner = leader;
-      } else if (this.iscore[leader] === this.iscore[loser]) {
-        this.score[leader] = "DEUCE";
-        this.score[loser] = "DEUCE";
+      } else if (
+        this.iscore[leader as PlayerNum] === this.iscore[loser as PlayerNum]
+      ) {
+        this.score[leader as PlayerNum] = "DEUCE";
+        this.score[loser as PlayerNum] = "DEUCE";
       } else {
-        this.score[leader] = leader === this.server ? "AD IN" : "AD OUT";
+        // Check if leader is serving (works for both singles and doubles)
+        const leaderIsServing = this.serverTeam
+          ? leader === this.serverTeam
+          : leader === this.server;
+        this.score[leader as PlayerNum] = leaderIsServing ? "AD IN" : "AD OUT";
       }
     } else {
-      this.score[leader] = this.nameOfScore(this.iscore[leader]);
-      this.score[loser] = this.nameOfScore(this.iscore[loser]);
+      this.score[leader as PlayerNum] = this.nameOfScore(
+        this.iscore[leader as PlayerNum]
+      );
+      this.score[loser as PlayerNum] = this.nameOfScore(
+        this.iscore[loser as PlayerNum]
+      );
     }
   }
 

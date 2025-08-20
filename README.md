@@ -26,10 +26,12 @@ Find TennisJS Vue at: https://github.com/mattriffle/tennisjs-vue/
 
 ## Basic Usage
 
+### Singles Match
+
 ```javascript
 import { TennisMatch, PointOutcomes } from "tennisjs";
 
-// Create a new best-of-3 sets match
+// Create a new best-of-3 sets singles match
 const match = new TennisMatch("Player 1", "Player 2", 3);
 
 // Score a point for Player 1 (Ace)
@@ -47,6 +49,44 @@ console.log(match.matchScore(1)); // Score from Player 1's perspective
 
 // Undo the last point
 match.removePoint();
+```
+
+### Doubles Match (New in v2.1)
+
+```javascript
+import { TennisMatch, PointOutcomes } from "tennisjs";
+
+// Create a new best-of-3 sets doubles match
+const doublesMatch = new TennisMatch(
+  ["Alice", "Bob"], // Team 1
+  ["Charlie", "Diana"], // Team 2
+  3
+);
+
+// Score a point for Team 1 with individual player tracking
+doublesMatch.scorePoint(
+  1, // Team 1 wins the point
+  PointOutcomes.ACE, // It was an ace
+  0, // No faults
+  { team: 1, position: "A" } // Alice scored the ace
+);
+
+// Alternative API for doubles - more explicit
+doublesMatch.scorePointDoubles(
+  1, // Team 1 wins
+  "B", // Player B (Bob) scored
+  PointOutcomes.WINNER // It was a winner
+);
+
+// Get match summary with individual player statistics
+const summary = doublesMatch.matchSummary();
+console.log(summary.team1.players.A.stats); // Alice's individual stats
+console.log(summary.team1.players.B.stats); // Bob's individual stats
+
+// Serving rotation is handled automatically
+// Order: Team1-PlayerA → Team2-PlayerA → Team1-PlayerB → Team2-PlayerB → repeat
+const currentServer = doublesMatch.getCurrentServer();
+console.log(`Current server: ${currentServer.name}`);
 ```
 
 ### Resuming a Match
@@ -98,6 +138,57 @@ const customLoader = () => {
 };
 
 const match = TennisMatch.load(customLoader);
+```
+
+## Doubles Support Features
+
+### Serving Rotation
+
+- **Regular Games**: One player serves the entire game
+- **Rotation Order**: T1-A → T2-A → T1-B → T2-B → repeat
+- **Tiebreak**: Server changes after 1st point, then every 2 points
+- **New Set**: The team that received first in the previous set serves first
+
+### Individual Player Statistics
+
+Each player in doubles has individual statistics tracked:
+
+- Points won/played
+- Aces (when serving)
+- Double faults (when serving)
+- Service winners
+- Return winners (when receiving)
+- Winners and unforced errors
+- Break points won/played
+
+### Match Summary Structure
+
+```javascript
+// Singles match summary
+{
+  meta: { matchType: 'singles', ... },
+  player1: { sets, games, points, stats },
+  player2: { sets, games, points, stats }
+}
+
+// Doubles match summary
+{
+  meta: {
+    matchType: 'doubles',
+    currentServer: { name, team, position },
+    teams: { 1: Team, 2: Team },
+    servingRotation: Player[],
+    ...
+  },
+  team1: {
+    sets, games, points,
+    players: {
+      A: { name, stats: { /* individual stats */ } },
+      B: { name, stats: { /* individual stats */ } }
+    }
+  },
+  team2: { /* same structure */ }
+}
 ```
 
 ## Where to send bugs?
