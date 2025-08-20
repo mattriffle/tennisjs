@@ -14,7 +14,7 @@ const testScore = (data: Array<number | string>) => {
 
   for (const player of players) {
     for (const unit of units) {
-      expect(summary[player][unit]).toEqual(data[index]);
+      expect(summary[player]![unit]).toEqual(data[index]);
       index++;
     }
   }
@@ -41,8 +41,8 @@ const undoAndTest = (data: Array<number | string>) => {
 describe("Match 1", () => {
   it("Checking meta", () => {
     let summary = match.matchSummary();
-    expect(summary.meta.player[1]).toEqual("Jim");
-    expect(summary.meta.player[2]).toEqual("Andre");
+    expect(summary.meta.player![1]).toEqual("Jim");
+    expect(summary.meta.player![2]).toEqual("Andre");
     expect(summary.meta.numSets).toEqual(3);
   });
 
@@ -156,10 +156,10 @@ describe("Match 1", () => {
     undoAndTest([0, 2, 15, 0, 5, 40]); // Undo set winner, before redoing
     scoreAndTest(2, [0, 0, 0, 1, 0, 0]); // Player 2 wins the set 6-2
     const summary = match.matchSummary();
-    expect(summary.player1.stats.ace).toBe(13);
-    expect(summary.player1.stats.return_winner).toBe(7);
-    expect(summary.player2.stats.ace).toBe(18);
-    expect(summary.player2.stats.return_winner).toBe(11);
+    expect(summary.player1!.stats.ace).toBe(13);
+    expect(summary.player1!.stats.return_winner).toBe(7);
+    expect(summary.player2!.stats.ace).toBe(18);
+    expect(summary.player2!.stats.return_winner).toBe(11);
   });
 
   it("Setting up tiebreak in set 2 by alternating games to 6-6", () => {
@@ -182,8 +182,8 @@ describe("Match 1", () => {
     }
 
     // Should now be 6-6 with a tiebreak initialized
-    expect(match.matchSummary().player1.games).toEqual(6);
-    expect(match.matchSummary().player2.games).toEqual(6);
+    expect(match.matchSummary().player1!.games).toEqual(6);
+    expect(match.matchSummary().player2!.games).toEqual(6);
     expect(match.matchSummary().meta.type).toEqual("Tiebreak");
   });
 
@@ -214,29 +214,29 @@ describe("Match 1", () => {
     scoreAndTest(1, [0, 6, 7, 1, 6, 6]); // 7-6 → Match point for Player 1
     scoreAndTest(1, [1, 0, 0, 1, 0, 0]); // 8-6 → Player 1 wins set
     const summary = match.matchSummary();
-    expect(summary.player1.stats.ace).toBe(43);
-    expect(summary.player1.stats.return_winner).toBe(9);
-    expect(summary.player2.stats.ace).toBe(47);
-    expect(summary.player2.stats.return_winner).toBe(12);
+    expect(summary.player1!.stats.ace).toBe(43);
+    expect(summary.player1!.stats.return_winner).toBe(9);
+    expect(summary.player2!.stats.ace).toBe(47);
+    expect(summary.player2!.stats.return_winner).toBe(12);
 
     // Confirm set scores now 1-1
-    expect(match.matchSummary().player1.points).toEqual(0);
-    expect(match.matchSummary().player1.games).toEqual(0);
-    expect(match.matchSummary().player1.sets).toEqual(1);
-    expect(match.matchSummary().player2.sets).toEqual(1);
+    expect(match.matchSummary().player1!.points).toEqual(0);
+    expect(match.matchSummary().player1!.games).toEqual(0);
+    expect(match.matchSummary().player1!.sets).toEqual(1);
+    expect(match.matchSummary().player2!.sets).toEqual(1);
   });
 
   it("Back out of set ending on tiebreak", () => {
     undoAndTest([0, 6, 7, 1, 6, 6]);
 
-    expect(match.matchSummary().player1.sets).toEqual(0);
-    expect(match.matchSummary().player2.sets).toEqual(1);
+    expect(match.matchSummary().player1!.sets).toEqual(0);
+    expect(match.matchSummary().player2!.sets).toEqual(1);
 
-    expect(match.matchSummary().player1.games).toEqual(6);
-    expect(match.matchSummary().player2.games).toEqual(6);
+    expect(match.matchSummary().player1!.games).toEqual(6);
+    expect(match.matchSummary().player2!.games).toEqual(6);
 
-    expect(match.matchSummary().player2.points).toEqual(6);
-    expect(match.matchSummary().player1.points).toEqual(7);
+    expect(match.matchSummary().player2!.points).toEqual(6);
+    expect(match.matchSummary().player1!.points).toEqual(7);
   });
 
   it("Nah, it was right the first time", () => {

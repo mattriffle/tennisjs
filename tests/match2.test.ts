@@ -23,15 +23,15 @@ describe("Match Completion and Undo/Redo at Match Boundary", () => {
     // Set 1: Player A wins 6-0
     winSet(match, 1);
     let summary = match.matchSummary();
-    expect(summary.player1.sets).toBe(1);
-    expect(summary.player2.sets).toBe(0);
+    expect(summary.player1!.sets).toBe(1);
+    expect(summary.player2!.sets).toBe(0);
     expect(match.winner).toBeUndefined();
 
     // Set 2: Player B wins 6-0
     winSet(match, 2);
     summary = match.matchSummary();
-    expect(summary.player1.sets).toBe(1);
-    expect(summary.player2.sets).toBe(1);
+    expect(summary.player1!.sets).toBe(1);
+    expect(summary.player2!.sets).toBe(1);
     expect(match.winner).toBeUndefined();
 
     // Set 3: Player A wins the set and the match
@@ -39,41 +39,41 @@ describe("Match Completion and Undo/Redo at Match Boundary", () => {
       winGame(match, 1);
     }
     summary = match.matchSummary();
-    expect(summary.player1.sets).toBe(1);
-    expect(summary.player2.sets).toBe(1);
-    expect(summary.player1.games).toBe(5);
-    expect(summary.player2.games).toBe(0);
+    expect(summary.player1!.sets).toBe(1);
+    expect(summary.player2!.sets).toBe(1);
+    expect(summary.player1!.games).toBe(5);
+    expect(summary.player2!.games).toBe(0);
     expect(match.winner).toBeUndefined();
 
     // Win the final game to win the match
     winGame(match, 1);
     summary = match.matchSummary();
-    expect(summary.player1.sets).toBe(2);
-    expect(summary.player2.sets).toBe(1);
+    expect(summary.player1!.sets).toBe(2);
+    expect(summary.player2!.sets).toBe(1);
     expect(match.winner).toBe(1);
 
     // Undo the match-winning point
     match.removePoint();
     summary = match.matchSummary();
     expect(match.winner).toBeUndefined();
-    expect(summary.player1.sets).toBe(1);
-    expect(summary.player2.sets).toBe(1);
-    expect(summary.player1.games).toBe(5);
-    expect(summary.player1.points).toBe(40);
+    expect(summary.player1!.sets).toBe(1);
+    expect(summary.player2!.sets).toBe(1);
+    expect(summary.player1!.games).toBe(5);
+    expect(summary.player1!.points).toBe(40);
 
     // Undo another point
     match.removePoint();
     summary = match.matchSummary();
     expect(match.winner).toBeUndefined();
-    expect(summary.player1.points).toBe(30);
+    expect(summary.player1!.points).toBe(30);
 
     // Redo the points to win the match again
     match.scorePoint(1);
     match.scorePoint(1);
     summary = match.matchSummary();
     expect(match.winner).toBe(1);
-    expect(summary.player1.sets).toBe(2);
-    expect(summary.player2.sets).toBe(1);
+    expect(summary.player1!.sets).toBe(2);
+    expect(summary.player2!.sets).toBe(1);
   });
   it("should correctly save and load a match", () => {
     let savedState: string | null = null;
@@ -100,8 +100,8 @@ describe("Match Completion and Undo/Redo at Match Boundary", () => {
     originalMatch.scorePoint(2); // P2 scores a point
 
     const summaryBeforeSave = originalMatch.matchSummary();
-    expect(summaryBeforeSave.player1.games).toBe(2);
-    expect(summaryBeforeSave.player2.points).toBe(30);
+    expect(summaryBeforeSave.player1!.games).toBe(2);
+    expect(summaryBeforeSave.player2!.points).toBe(30);
 
     // The save should have been happening automatically, so savedState should be populated
     expect(savedState).not.toBeNull();
@@ -122,8 +122,8 @@ describe("Match Completion and Undo/Redo at Match Boundary", () => {
       loadedMatch.scorePoint(1); // P1 wins game 3
 
       const finalSummary = loadedMatch.matchSummary();
-      expect(finalSummary.player1.games).toBe(3);
-      expect(finalSummary.player2.games).toBe(0);
+      expect(finalSummary.player1!.games).toBe(3);
+      expect(finalSummary.player2!.games).toBe(0);
     }
   });
 });
