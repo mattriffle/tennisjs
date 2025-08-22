@@ -1,9 +1,13 @@
-import { TennisMatch, PointOutcomes } from "../src";
+import { LegacyTennisMatch, PointOutcomes } from "../src";
 
 describe("Doubles Match Tests", () => {
   describe("Match Initialization", () => {
     it("should create a doubles match with correct team structure", () => {
-      const match = new TennisMatch(["Alice", "Bob"], ["Charlie", "Diana"], 3);
+      const match = new LegacyTennisMatch(
+        ["Alice", "Bob"],
+        ["Charlie", "Diana"],
+        3
+      );
 
       expect(match.matchType).toBe("doubles");
       expect(match.teams).toBeDefined();
@@ -14,7 +18,11 @@ describe("Doubles Match Tests", () => {
     });
 
     it("should initialize serving rotation correctly", () => {
-      const match = new TennisMatch(["Alice", "Bob"], ["Charlie", "Diana"], 3);
+      const match = new LegacyTennisMatch(
+        ["Alice", "Bob"],
+        ["Charlie", "Diana"],
+        3
+      );
 
       expect(match.servingRotation).toBeDefined();
       expect(match.servingRotation!.length).toBe(4);
@@ -25,7 +33,11 @@ describe("Doubles Match Tests", () => {
     });
 
     it("should set first server as Team 1 Player A by default", () => {
-      const match = new TennisMatch(["Alice", "Bob"], ["Charlie", "Diana"], 3);
+      const match = new LegacyTennisMatch(
+        ["Alice", "Bob"],
+        ["Charlie", "Diana"],
+        3
+      );
 
       const currentServer = match.getCurrentServer();
       expect(currentServer).toEqual(match.servingRotation![0]);
@@ -33,14 +45,18 @@ describe("Doubles Match Tests", () => {
   });
 
   describe("Serving Rotation", () => {
-    const winGame = (match: TennisMatch, team: 1 | 2) => {
+    const winGame = (match: LegacyTennisMatch, team: 1 | 2) => {
       for (let i = 0; i < 4; i++) {
         match.scorePoint(team);
       }
     };
 
     it("should follow correct serving order: T1A → T2A → T1B → T2B", () => {
-      const match = new TennisMatch(["Alice", "Bob"], ["Charlie", "Diana"], 3);
+      const match = new LegacyTennisMatch(
+        ["Alice", "Bob"],
+        ["Charlie", "Diana"],
+        3
+      );
 
       // First game - Alice serves
       let server = match.getCurrentServer();
@@ -68,7 +84,11 @@ describe("Doubles Match Tests", () => {
     });
 
     it("should maintain server throughout entire game", () => {
-      const match = new TennisMatch(["Alice", "Bob"], ["Charlie", "Diana"], 3);
+      const match = new LegacyTennisMatch(
+        ["Alice", "Bob"],
+        ["Charlie", "Diana"],
+        3
+      );
 
       // Alice serves the entire first game
       let server = match.getCurrentServer();
@@ -99,7 +119,7 @@ describe("Doubles Match Tests", () => {
   });
 
   describe("Tiebreak Serving", () => {
-    const setupTiebreak = (match: TennisMatch) => {
+    const setupTiebreak = (match: LegacyTennisMatch) => {
       // Quick setup to 6-6
       for (let i = 0; i < 6; i++) {
         // Team 1 wins a game
@@ -114,7 +134,11 @@ describe("Doubles Match Tests", () => {
     };
 
     it("should change server after first point in tiebreak", () => {
-      const match = new TennisMatch(["Alice", "Bob"], ["Charlie", "Diana"], 3);
+      const match = new LegacyTennisMatch(
+        ["Alice", "Bob"],
+        ["Charlie", "Diana"],
+        3
+      );
 
       setupTiebreak(match);
 
@@ -131,7 +155,11 @@ describe("Doubles Match Tests", () => {
     });
 
     it("should change server every 2 points after first point", () => {
-      const match = new TennisMatch(["Alice", "Bob"], ["Charlie", "Diana"], 3);
+      const match = new LegacyTennisMatch(
+        ["Alice", "Bob"],
+        ["Charlie", "Diana"],
+        3
+      );
 
       setupTiebreak(match);
 
@@ -163,7 +191,11 @@ describe("Doubles Match Tests", () => {
 
   describe("Individual Player Statistics", () => {
     it("should track points won by each player individually", () => {
-      const match = new TennisMatch(["Alice", "Bob"], ["Charlie", "Diana"], 3);
+      const match = new LegacyTennisMatch(
+        ["Alice", "Bob"],
+        ["Charlie", "Diana"],
+        3
+      );
 
       // Alice scores an ace
       match.scorePoint(1, PointOutcomes.ACE, 0, { team: 1, position: "A" });
@@ -190,7 +222,11 @@ describe("Doubles Match Tests", () => {
     });
 
     it("should track aces for serving player only", () => {
-      const match = new TennisMatch(["Alice", "Bob"], ["Charlie", "Diana"], 3);
+      const match = new LegacyTennisMatch(
+        ["Alice", "Bob"],
+        ["Charlie", "Diana"],
+        3
+      );
 
       // Alice is serving and scores an ace
       match.scorePoint(1, PointOutcomes.ACE, 0, { team: 1, position: "A" });
@@ -202,7 +238,11 @@ describe("Doubles Match Tests", () => {
     });
 
     it("should use scorePointDoubles method correctly", () => {
-      const match = new TennisMatch(["Alice", "Bob"], ["Charlie", "Diana"], 3);
+      const match = new LegacyTennisMatch(
+        ["Alice", "Bob"],
+        ["Charlie", "Diana"],
+        3
+      );
 
       // Use the alternative API
       match.scorePointDoubles(1, "A", PointOutcomes.ACE);
@@ -218,7 +258,11 @@ describe("Doubles Match Tests", () => {
 
   describe("Score Tracking", () => {
     it("should track team scores correctly", () => {
-      const match = new TennisMatch(["Alice", "Bob"], ["Charlie", "Diana"], 3);
+      const match = new LegacyTennisMatch(
+        ["Alice", "Bob"],
+        ["Charlie", "Diana"],
+        3
+      );
 
       // Team 1 wins first game
       for (let i = 0; i < 4; i++) {
@@ -240,7 +284,11 @@ describe("Doubles Match Tests", () => {
     });
 
     it("should handle deuce and advantage in doubles", () => {
-      const match = new TennisMatch(["Alice", "Bob"], ["Charlie", "Diana"], 3);
+      const match = new LegacyTennisMatch(
+        ["Alice", "Bob"],
+        ["Charlie", "Diana"],
+        3
+      );
 
       // Get to deuce
       match.scorePoint(1); // 15-0
@@ -269,7 +317,11 @@ describe("Doubles Match Tests", () => {
 
   describe("Match Summary", () => {
     it("should return correct doubles format for matchSummary", () => {
-      const match = new TennisMatch(["Alice", "Bob"], ["Charlie", "Diana"], 3);
+      const match = new LegacyTennisMatch(
+        ["Alice", "Bob"],
+        ["Charlie", "Diana"],
+        3
+      );
 
       const summary = match.matchSummary();
 
@@ -284,7 +336,11 @@ describe("Doubles Match Tests", () => {
     });
 
     it("should include all four players in summary", () => {
-      const match = new TennisMatch(["Alice", "Bob"], ["Charlie", "Diana"], 3);
+      const match = new LegacyTennisMatch(
+        ["Alice", "Bob"],
+        ["Charlie", "Diana"],
+        3
+      );
 
       const summary = match.matchSummary();
 
@@ -297,7 +353,11 @@ describe("Doubles Match Tests", () => {
 
   describe("Undo/Redo Operations", () => {
     it("should undo last point and maintain server", () => {
-      const match = new TennisMatch(["Alice", "Bob"], ["Charlie", "Diana"], 3);
+      const match = new LegacyTennisMatch(
+        ["Alice", "Bob"],
+        ["Charlie", "Diana"],
+        3
+      );
 
       const initialServer = match.getCurrentServer();
 
@@ -317,7 +377,11 @@ describe("Doubles Match Tests", () => {
     });
 
     it("should undo across game boundaries correctly", () => {
-      const match = new TennisMatch(["Alice", "Bob"], ["Charlie", "Diana"], 3);
+      const match = new LegacyTennisMatch(
+        ["Alice", "Bob"],
+        ["Charlie", "Diana"],
+        3
+      );
 
       // Win first game
       for (let i = 0; i < 4; i++) {
@@ -340,7 +404,7 @@ describe("Doubles Match Tests", () => {
     it("should save doubles match state completely", () => {
       let savedState: string | null = null;
 
-      const customSaver = (matchToSave: TennisMatch) => {
+      const customSaver = (matchToSave: LegacyTennisMatch) => {
         const replacer = (key: string, value: any) => {
           if (key === "saveCallback") return undefined;
           return value;
@@ -348,7 +412,7 @@ describe("Doubles Match Tests", () => {
         savedState = JSON.stringify(matchToSave, replacer);
       };
 
-      const match = new TennisMatch(
+      const match = new LegacyTennisMatch(
         ["Alice", "Bob"],
         ["Charlie", "Diana"],
         3,
@@ -368,7 +432,7 @@ describe("Doubles Match Tests", () => {
     it("should load doubles match with all player data", () => {
       let savedState: string | null = null;
 
-      const customSaver = (matchToSave: TennisMatch) => {
+      const customSaver = (matchToSave: LegacyTennisMatch) => {
         const replacer = (key: string, value: any) => {
           if (key === "saveCallback") return undefined;
           return value;
@@ -378,7 +442,7 @@ describe("Doubles Match Tests", () => {
 
       const customLoader = () => savedState;
 
-      const originalMatch = new TennisMatch(
+      const originalMatch = new LegacyTennisMatch(
         ["Alice", "Bob"],
         ["Charlie", "Diana"],
         3,
@@ -393,7 +457,7 @@ describe("Doubles Match Tests", () => {
       const originalSummary = originalMatch.matchSummary();
 
       // Load the match
-      const loadedMatch = TennisMatch.load(customLoader, customSaver);
+      const loadedMatch = LegacyTennisMatch.load(customLoader, customSaver);
       expect(loadedMatch).not.toBeNull();
 
       const loadedSummary = loadedMatch!.matchSummary();
@@ -407,7 +471,7 @@ describe("Doubles Match Tests", () => {
 
   describe("Backwards Compatibility", () => {
     it("should still support singles matches", () => {
-      const match = new TennisMatch("Alice", "Bob", 3);
+      const match = new LegacyTennisMatch("Alice", "Bob", 3);
 
       expect(match.matchType).toBe("singles");
       expect(match.player).toBeDefined();
@@ -444,14 +508,18 @@ describe("Doubles Match Tests", () => {
         },
       };
 
-      const match = TennisMatch.fromJSON(oldSinglesData);
+      const match = LegacyTennisMatch.fromJSON(oldSinglesData);
       expect(match.matchType).toBe("singles");
     });
   });
 
   describe("getScore method", () => {
     it("should return correct format for doubles", () => {
-      const match = new TennisMatch(["Alice", "Bob"], ["Charlie", "Diana"], 3);
+      const match = new LegacyTennisMatch(
+        ["Alice", "Bob"],
+        ["Charlie", "Diana"],
+        3
+      );
 
       match.scorePoint(1);
       match.scorePoint(1);

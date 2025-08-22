@@ -1,667 +1,691 @@
+/**
+ * Unified tennis match implementation using the new data model.
+ */
+
 import {
-  PlayerNum,
-  TeamNum,
-  PointOutcomes,
-  NumericScoreObj,
-  MatchSummary,
-  SimpleScore,
-  MatchType,
-  Player,
-  Team,
-  PlayerIdentifier,
-  DoublesPlayerStats,
-  PlayerPosition,
-} from "./types.js";
-import { Point } from "./Point.js";
-import { Game } from "./Game.js";
-import { TieBreak } from "./TieBreak.js";
-import { Set } from "./Set.js";
+  UnifiedMatchSummary,
+  MatchConfig,
+  MatchFormat,
+  AnyParticipant,
+  PointOutcome,
+  PointSummary,
+  GameSummary,
+  SetSummary,
+  ParticipantPosition,
+  isDoublesTeam,
+  isSinglesPlayer,
+  TeamPlayerPosition,
+} from "./unified-types.js";
+import {
+  createMatchParticipants,
+  getNextServer,
+  createServingRotation,
+  getPlayerIds,
+} from "./participant-factory.js";
+import {
+  StatisticsManager,
+  createEmptyStats,
+  createEmptyTeamStats,
+} from "./statistics-aggregator.js";
+import { LegacyAdapter } from "./legacy-adapter.js";
 
 /**
- * The main class for managing a tennis match.
+ * Main class for managing a tennis match with unified singles and doubles support.
  */
 export class TennisMatch {
-  // Singles properties
-  player?: { 1: string; 2: string };
+  private config: MatchConfig;
+  private participants: { 1: AnyParticipant; 2: AnyParticipant };
+  private statsManager: StatisticsManager;
+  private currentSet: number;
+  private currentGame: number;
+  private setHistory: SetSummary[];
+  private currentSetGames: GameSummary[];
+  private currentGamePoints: PointSummary[];
+  private tiebreak: boolean;
+  private matchWinner?: ParticipantPosition;
+  private servingRotation?: string[];
+  private currentServerId: string;
+  private setScores: [number, number];
+  private gameScores: [number, number];
+  private pointScores: [number | string, number | string];
+  private saveCallback?: (match: TennisMatch) => void;
 
-  // Doubles properties
-  matchType: MatchType;
-  teams?: { 1: Team; 2: Team };
-  servingRotation?: Player[];
-  currentServerIndex?: number;
-
-  // Common properties
-  numSets: number;
-  score: NumericScoreObj;
-  set: Set;
-  sets: Set[];
-  winner?: PlayerNum | TeamNum;
-  saveCallback: ((match: TennisMatch) => void) | null;
-
-  /**
-   * Creates a new tennis match.
-   * @param player1OrTeam1 The name of player 1 or team 1 players.
-   * @param player2OrTeam2 The name of player 2 or team 2 players.
-   * @param numSets The total number of sets to be played (must be an odd number, e.g., 3 or 5).
-   * @param saveCallback An optional callback function to persist the match state. Defaults to using localStorage if available.
-   */
   constructor(
     player1OrTeam1: string | [string, string],
     player2OrTeam2: string | [string, string],
-    numSets: number,
+    numSets: number = 3,
     saveCallback?: (match: TennisMatch) => void
   ) {
-    if (numSets % 2 === 0) throw new Error("Number of sets must be odd.");
-
-    this.numSets = numSets;
-    this.score = { 1: 0, 2: 0 };
-    this.sets = [];
-
-    // Detect match type based on input
-    if (
-      typeof player1OrTeam1 === "string" &&
-      typeof player2OrTeam2 === "string"
-    ) {
-      // Singles match
-      this.matchType = "singles";
-      this.player = { 1: player1OrTeam1, 2: player2OrTeam2 };
-      this.set = new Set(1); // Player 1 starts serving by default
-    } else if (Array.isArray(player1OrTeam1) && Array.isArray(player2OrTeam2)) {
-      // Doubles match
-      this.matchType = "doubles";
-      this.teams = {
-        1: {
-          players: [
-            { name: player1OrTeam1[0], position: "A", team: 1 },
-            { name: player1OrTeam1[1], position: "B", team: 1 },
-          ],
-          teamNum: 1,
-        },
-        2: {
-          players: [
-            { name: player2OrTeam2[0], position: "A", team: 2 },
-            { name: player2OrTeam2[1], position: "B", team: 2 },
-          ],
-          teamNum: 2,
-        },
-      };
-      // Initialize serving rotation: T1A → T2A → T1B → T2B
-      this.servingRotation = [
-        this.teams[1].players[0],
-        this.teams[2].players[0],
-        this.teams[1].players[1],
-        this.teams[2].players[1],
-      ];
-      this.currentServerIndex = 0;
-      this.set = new Set(this.servingRotation[0], this.servingRotation);
-    } else {
-      throw new Error("Invalid player/team configuration");
+    if (numSets % 2 === 0) {
+      throw new Error("Number of sets must be odd");
     }
 
-    if (saveCallback) {
-      this.saveCallback = saveCallback;
-    } else if (typeof localStorage !== "undefined") {
-      this.saveCallback = (match) => {
-        const replacer = (key: string, value: any) => {
-          if (key === "saveCallback") return undefined;
-          return value;
-        };
-        localStorage.setItem("tennisMatch", JSON.stringify(match, replacer));
-      };
+    // Create participants
+    this.participants = createMatchParticipants(player1OrTeam1, player2OrTeam2);
+
+    // Determine match type
+    const matchType =
+      this.participants[1].type === "player" ? "singles" : "doubles";
+
+    // Initialize configuration
+    this.config = {
+      matchType,
+      participants: {
+        1: this.participants[1] as any,
+        2: this.participants[2] as any,
+      },
+      format: {
+        sets: numSets,
+        tiebreakAt: 6,
+        finalSetTiebreak: true,
+      },
+    };
+
+    // Initialize statistics
+    this.statsManager = new StatisticsManager();
+    this.statsManager.initializeParticipants(this.participants);
+
+    // Initialize match state
+    this.currentSet = 1;
+    this.currentGame = 1;
+    this.setHistory = [];
+    this.currentSetGames = [];
+    this.currentGamePoints = [];
+    this.tiebreak = false;
+    this.setScores = [0, 0];
+    this.gameScores = [0, 0];
+    this.pointScores = [0, 0];
+
+    // Initialize serving
+    if (matchType === "doubles") {
+      const team1 = this.participants[1] as any;
+      const team2 = this.participants[2] as any;
+      this.servingRotation = createServingRotation(
+        team1,
+        team2,
+        { team: 1, player: "a" } // Default: Team 1 Player A serves first
+      );
+      this.currentServerId = this.servingRotation[0];
     } else {
-      this.saveCallback = null;
+      // Singles: Player 1 serves first by default
+      this.currentServerId = this.participants[1].id;
     }
+
+    this.saveCallback = saveCallback || this.defaultSaveCallback();
   }
 
   /**
-   * Scores a point for a player/team in the match.
-   * @param winner The player/team who won the point.
-   * @param how The way the point was won (e.g., ACE, WINNER).
-   * @param fault The number of faults on the serve.
-   * @param scoringPlayer The specific player who scored (for doubles).
+   * Scores a point in the match.
    */
   scorePoint(
-    winner: PlayerNum | TeamNum,
-    how: PointOutcomes = PointOutcomes.REGULAR,
-    fault: number = 0,
-    scoringPlayer?: PlayerIdentifier
+    winner: ParticipantPosition,
+    outcome: PointOutcome = PointOutcome.Regular,
+    scorerId?: string, // For doubles: ID of the specific player who scored
+    isFirstServe: boolean = true
   ): void {
-    if (this.winner) return;
-
-    if (this.matchType === "doubles" && scoringPlayer) {
-      // Track individual player stats for doubles
-      this.set.scorePoint(winner, how, fault, scoringPlayer);
-    } else {
-      // Singles match or team-level scoring
-      this.set.scorePoint(winner, how, fault);
-    }
-
-    this.updateMatch();
-    this.save();
-  }
-
-  /**
-   * Alternative method for scoring in doubles with explicit player tracking.
-   * @param winningTeam The team that won the point.
-   * @param scoringPlayer The position of the player who scored.
-   * @param how The way the point was won.
-   * @param fault The number of faults on the serve.
-   */
-  scorePointDoubles(
-    winningTeam: TeamNum,
-    scoringPlayer: PlayerPosition,
-    how: PointOutcomes = PointOutcomes.REGULAR,
-    fault: number = 0
-  ): void {
-    if (this.matchType !== "doubles") {
-      throw new Error("scorePointDoubles can only be used in doubles matches");
-    }
-    this.scorePoint(winningTeam, how, fault, {
-      team: winningTeam,
-      position: scoringPlayer,
-    });
-  }
-
-  /**
-   * Removes the last scored point from the match. Handles transitions between sets.
-   */
-  removePoint(): void {
-    if (
-      this.set.game.points.length === 0 &&
-      this.set.games.length === 0 &&
-      !this.set.tiebreak &&
-      this.sets.length > 0
-    ) {
-      // We are at the beginning of a new set, so we need to restore the previous set.
-      const previousSet = this.sets.pop()!;
-      this.score[previousSet.winner as PlayerNum]--;
-      this.set = previousSet;
-    }
-
-    // Reset any match winner before undoing the point.
-    this.winner = undefined;
-    this.set.removePoint();
-    this.updateMatch();
-    this.save();
-  }
-
-  /**
-   * Updates the match score after a set is completed and checks for a match winner.
-   */
-  updateMatch(): void {
-    if (!this.set.winner) return;
-
-    // This check prevents incrementing the set score multiple times if updateMatch is called again.
-    if (this.sets.length > 0 && this.sets[this.sets.length - 1] === this.set) {
+    if (this.matchWinner) {
+      console.warn("Match is already complete");
       return;
     }
 
-    this.score[this.set.winner as PlayerNum]++;
+    const loser: ParticipantPosition = winner === 1 ? 2 : 1;
+    const winnerId = this.participants[winner].id;
+    const loserId = this.participants[loser].id;
 
-    const toServe = this.set.nextServer!;
-    this.sets.push(this.set);
+    // Create point summary
+    const point: PointSummary = {
+      winner,
+      outcome,
+      server: this.currentServerId,
+      scorer: scorerId,
+      timestamp: new Date(),
+    };
 
-    // Create new set with proper serving rotation for doubles
-    if (this.matchType === "doubles" && this.servingRotation) {
-      // In doubles, alternate which team starts serving each set
-      // Find the next server in rotation
-      const currentServer = toServe as Player;
-      const serverIndex = this.servingRotation.findIndex(
-        (p) =>
-          p.team === currentServer.team && p.position === currentServer.position
-      );
-      this.currentServerIndex = serverIndex;
-      this.set = new Set(toServe, this.servingRotation);
-    } else {
-      this.set = new Set(toServe as PlayerNum);
+    // Update statistics
+    this.statsManager.recordPoint(
+      winnerId,
+      loserId,
+      outcome,
+      this.currentServerId,
+      scorerId,
+      isFirstServe
+    );
+
+    // Add point to current game
+    this.currentGamePoints.push(point);
+
+    // Update point score
+    this.updatePointScore(winner);
+
+    // Check for game winner
+    if (this.checkGameWinner()) {
+      this.completeGame(winner);
     }
 
-    const leader: PlayerNum | TeamNum = this.score[1] > this.score[2] ? 1 : 2;
-    if (this.score[leader as PlayerNum] > Math.floor(this.numSets / 2)) {
-      this.winner = leader;
+    // Save state
+    this.save();
+  }
+
+  /**
+   * Updates the point score within a game or tiebreak.
+   */
+  private updatePointScore(winner: ParticipantPosition): void {
+    const loser: ParticipantPosition = winner === 1 ? 2 : 1;
+
+    if (this.tiebreak) {
+      // Tiebreak scoring - count the points from currentGamePoints
+      const numericScores = this.getNumericPointScores();
+      this.pointScores = numericScores;
+
+      // Update server in tiebreak (changes every 2 points after first point)
+      const totalPoints = numericScores[0] + numericScores[1];
+      if (totalPoints === 1 || (totalPoints > 1 && totalPoints % 2 === 1)) {
+        this.rotateServer();
+      }
+    } else {
+      // Regular game scoring - count points from currentGamePoints and convert
+      const numericScores = this.getNumericPointScores();
+      this.pointScores = this.convertToTennisScore(numericScores);
     }
   }
 
   /**
-   * Manually triggers the save callback to persist the match state.
+   * Converts numeric scores to tennis scoring (0, 15, 30, 40, deuce, advantage).
    */
-  save(): void {
+  private convertToTennisScore(
+    scores: [number, number]
+  ): [number | string, number | string] {
+    const [p1Score, p2Score] = scores;
+
+    // Both at 3+ points
+    if (p1Score >= 3 && p2Score >= 3) {
+      if (p1Score === p2Score) {
+        return ["DEUCE", "DEUCE"];
+      } else if (p1Score > p2Score) {
+        const serverIs1 = this.getServerPosition() === 1;
+        return [serverIs1 ? "AD IN" : "AD OUT", "-"];
+      } else {
+        const serverIs2 = this.getServerPosition() === 2;
+        return ["-", serverIs2 ? "AD IN" : "AD OUT"];
+      }
+    }
+
+    // Regular scoring
+    const scoreMap: { [key: number]: number } = { 0: 0, 1: 15, 2: 30, 3: 40 };
+    return [
+      p1Score <= 3 ? scoreMap[p1Score] : 40,
+      p2Score <= 3 ? scoreMap[p2Score] : 40,
+    ];
+  }
+
+  /**
+   * Checks if there's a game winner.
+   */
+  private checkGameWinner(): boolean {
+    if (this.tiebreak) {
+      const [p1Score, p2Score] = this.pointScores as [number, number];
+      return (p1Score >= 7 || p2Score >= 7) && Math.abs(p1Score - p2Score) >= 2;
+    } else {
+      const scores = this.getNumericPointScores();
+      const [p1Score, p2Score] = scores;
+      return (p1Score >= 4 || p2Score >= 4) && Math.abs(p1Score - p2Score) >= 2;
+    }
+  }
+
+  /**
+   * Gets numeric point scores from current point scores.
+   */
+  private getNumericPointScores(): [number, number] {
+    // Always count points in current game/tiebreak
+    let p1Points = 0;
+    let p2Points = 0;
+    for (const point of this.currentGamePoints) {
+      if (point.winner === 1) p1Points++;
+      else p2Points++;
+    }
+    return [p1Points, p2Points];
+  }
+
+  /**
+   * Completes the current game.
+   */
+  private completeGame(winner: ParticipantPosition): void {
+    // Determine actual game winner based on who has more points
+    const scores = this.getNumericPointScores();
+    const actualWinner: ParticipantPosition = scores[0] > scores[1] ? 1 : 2;
+
+    // Create game summary
+    const game: GameSummary = {
+      winner: actualWinner,
+      server: this.currentServerId,
+      score: [...this.pointScores] as [number | string, number | string],
+      points: [...this.currentGamePoints],
+      deuce: this.currentGamePoints.some((p, i) => {
+        // Check if we had deuce at any point
+        let p1Points = 0;
+        let p2Points = 0;
+        for (let j = 0; j <= i; j++) {
+          if (this.currentGamePoints[j].winner === 1) p1Points++;
+          else p2Points++;
+        }
+        return p1Points >= 3 && p2Points >= 3 && p1Points === p2Points;
+      }),
+    };
+
+    // Add game to current set
+    this.currentSetGames.push(game);
+
+    // Update game score
+    this.gameScores[actualWinner - 1]++;
+
+    // Store tiebreak score before resetting
+    const tiebreakScore = this.tiebreak
+      ? ([...this.pointScores] as [number, number])
+      : undefined;
+
+    // Reset for next game
+    this.currentGamePoints = [];
+    this.pointScores = [0, 0];
+    this.currentGame++;
+
+    // Check for set winner
+    if (this.checkSetWinner()) {
+      const setWinner = this.gameScores[0] > this.gameScores[1] ? 1 : 2;
+      this.completeSet(setWinner as ParticipantPosition, tiebreakScore);
+    } else {
+      // Check for tiebreak
+      if (this.gameScores[0] === 6 && this.gameScores[1] === 6) {
+        this.tiebreak = true;
+        this.pointScores = [0, 0];
+      } else {
+        // Rotate server for next game
+        if (!this.tiebreak) {
+          this.rotateServer();
+        }
+      }
+    }
+  }
+
+  /**
+   * Checks if there's a set winner.
+   */
+  private checkSetWinner(): boolean {
+    const [p1Games, p2Games] = this.gameScores;
+
+    // Win by 2 games with at least 6 games
+    if (p1Games >= 6 || p2Games >= 6) {
+      const diff = Math.abs(p1Games - p2Games);
+      if (diff >= 2) return true;
+
+      // Tiebreak winner
+      if (this.tiebreak && (p1Games === 7 || p2Games === 7)) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  /**
+   * Completes the current set.
+   */
+  private completeSet(
+    winner: ParticipantPosition,
+    tiebreakScore?: [number, number]
+  ): void {
+    // Create set summary
+    const setSummary: SetSummary = {
+      winner,
+      score: [...this.gameScores] as [number, number],
+      games: [...this.currentSetGames],
+    };
+
+    if (this.tiebreak && tiebreakScore) {
+      setSummary.tiebreak = {
+        winner,
+        score: tiebreakScore,
+        points: [...this.currentGamePoints],
+        miniBreaks: [], // Could track mini-breaks if needed
+      };
+    }
+
+    // Add set to history
+    this.setHistory.push(setSummary);
+
+    // Update set score
+    this.setScores[winner - 1]++;
+
+    // Check for match winner
+    if (this.checkMatchWinner()) {
+      this.matchWinner = winner;
+    } else {
+      // Reset for next set
+      this.currentSet++;
+      this.currentGame = 1;
+      this.currentSetGames = [];
+      this.currentGamePoints = [];
+      this.gameScores = [0, 0];
+      this.pointScores = [0, 0];
+      this.tiebreak = false;
+
+      // Alternate who serves first in new set
+      this.rotateServer();
+    }
+  }
+
+  /**
+   * Checks if there's a match winner.
+   */
+  private checkMatchWinner(): boolean {
+    const setsToWin = Math.ceil(this.config.format.sets / 2);
+    return this.setScores[0] >= setsToWin || this.setScores[1] >= setsToWin;
+  }
+
+  /**
+   * Rotates the server.
+   */
+  private rotateServer(): void {
+    if (this.config.matchType === "singles") {
+      // Singles: alternate between players
+      this.currentServerId =
+        this.currentServerId === this.participants[1].id
+          ? this.participants[2].id
+          : this.participants[1].id;
+    } else if (this.servingRotation) {
+      // Doubles: follow rotation
+      this.currentServerId = getNextServer(
+        this.servingRotation,
+        this.currentServerId
+      );
+    }
+  }
+
+  /**
+   * Gets the position of the current server.
+   */
+  private getServerPosition(): ParticipantPosition {
+    if (this.currentServerId === this.participants[1].id) return 1;
+    if (this.currentServerId === this.participants[2].id) return 2;
+
+    // For doubles, check team members
+    if (isDoublesTeam(this.participants[1])) {
+      const team1 = this.participants[1];
+      if (
+        team1.players.a.id === this.currentServerId ||
+        team1.players.b.id === this.currentServerId
+      ) {
+        return 1;
+      }
+    }
+
+    return 2; // Default to team 2
+  }
+
+  /**
+   * Removes the last point scored.
+   */
+  removePoint(): void {
+    if (this.currentGamePoints.length === 0) {
+      // Need to restore previous game
+      if (this.currentSetGames.length > 0) {
+        const lastGame = this.currentSetGames.pop()!;
+        this.currentGamePoints = lastGame.points;
+        this.gameScores[lastGame.winner - 1]--;
+        this.currentGame--;
+
+        // Restore point score from last point
+        const lastPoint = this.currentGamePoints.pop();
+        if (lastPoint) {
+          // Recalculate point score
+          this.recalculatePointScore();
+        }
+      } else if (this.setHistory.length > 0) {
+        // Need to restore previous set
+        const lastSet = this.setHistory.pop()!;
+        this.currentSetGames = lastSet.games;
+        this.setScores[lastSet.winner - 1]--;
+        this.currentSet--;
+
+        // Restore last game of previous set
+        if (this.currentSetGames.length > 0) {
+          this.removePoint(); // Recursive call to handle the game
+        }
+      }
+    } else {
+      // Remove last point from current game
+      const lastPoint = this.currentGamePoints.pop()!;
+
+      // Recalculate point score
+      this.recalculatePointScore();
+
+      // TODO: Update statistics (would need to implement removePoint in StatisticsManager)
+    }
+
+    // Clear match winner if set
+    this.matchWinner = undefined;
+
+    this.save();
+  }
+
+  /**
+   * Recalculates point score based on current game points.
+   */
+  private recalculatePointScore(): void {
+    if (this.tiebreak) {
+      let p1Points = 0;
+      let p2Points = 0;
+      for (const point of this.currentGamePoints) {
+        if (point.winner === 1) p1Points++;
+        else p2Points++;
+      }
+      this.pointScores = [p1Points, p2Points];
+    } else {
+      const scores = [0, 0] as [number, number];
+      for (const point of this.currentGamePoints) {
+        scores[point.winner - 1]++;
+      }
+      this.pointScores = this.convertToTennisScore(scores) as [
+        number | string,
+        number | string,
+      ];
+    }
+  }
+
+  /**
+   * Gets the current match summary.
+   */
+  getMatchSummary(): UnifiedMatchSummary {
+    return {
+      meta: {
+        ...this.config.format,
+        matchType: this.config.matchType,
+        format: this.config.format,
+        status: this.matchWinner ? "completed" : "in-progress",
+      },
+      score: {
+        participants: this.participants,
+        sets: this.setScores,
+        games: this.gameScores,
+        points: {
+          values: this.pointScores,
+          type: this.tiebreak ? "tiebreak" : "game",
+        },
+        server: {
+          current: this.currentServerId,
+          rotation: this.servingRotation,
+        },
+        winner: this.matchWinner,
+      },
+      participants: {
+        1: {
+          info: this.participants[1],
+          stats:
+            this.statsManager.getStats(this.participants[1].id) ||
+            createEmptyStats(),
+        },
+        2: {
+          info: this.participants[2],
+          stats:
+            this.statsManager.getStats(this.participants[2].id) ||
+            createEmptyStats(),
+        },
+      },
+      matchScore: this.getMatchScoreString(),
+      currentSet: this.currentSet,
+      currentGame: this.currentGame,
+      setHistory: this.setHistory,
+    };
+  }
+
+  /**
+   * Gets the match score as a string.
+   */
+  getMatchScoreString(): string {
+    const scores: string[] = [];
+
+    for (const set of this.setHistory) {
+      let setScore = `${set.score[0]}-${set.score[1]}`;
+      if (set.tiebreak) {
+        const loserScore =
+          set.tiebreak.winner === 1
+            ? set.tiebreak.score[1]
+            : set.tiebreak.score[0];
+        setScore += `(${loserScore})`;
+      }
+      scores.push(setScore);
+    }
+
+    // Add current set if not complete
+    if (!this.matchWinner) {
+      scores.push(`${this.gameScores[0]}-${this.gameScores[1]}`);
+    }
+
+    return scores.join(", ");
+  }
+
+  /**
+   * Gets a simple score object (for backward compatibility).
+   */
+  getScore(): any {
+    const summary = this.getMatchSummary();
+    return LegacyAdapter.toLegacyScore(summary);
+  }
+
+  /**
+   * Gets legacy match summary (for backward compatibility).
+   */
+  matchSummary(): any {
+    const summary = this.getMatchSummary();
+    return LegacyAdapter.autoConvert(summary);
+  }
+
+  /**
+   * Saves the match state.
+   */
+  private save(): void {
     if (this.saveCallback) {
       this.saveCallback(this);
     }
   }
 
   /**
-   * Creates a TennisMatch instance from a plain JSON object.
-   * @param data The plain object.
-   * @param saveCallback An optional callback function to persist the match state.
-   * @returns A TennisMatch instance.
+   * Default save callback using localStorage.
+   */
+  private defaultSaveCallback(): ((match: TennisMatch) => void) | undefined {
+    if (typeof localStorage !== "undefined") {
+      return (match) => {
+        const data = match.toJSON();
+        localStorage.setItem("unifiedTennisMatch", JSON.stringify(data));
+      };
+    }
+    return undefined;
+  }
+
+  /**
+   * Converts match to JSON for serialization.
+   */
+  toJSON(): any {
+    return {
+      config: this.config,
+      participants: this.participants,
+      currentSet: this.currentSet,
+      currentGame: this.currentGame,
+      setHistory: this.setHistory,
+      currentSetGames: this.currentSetGames,
+      currentGamePoints: this.currentGamePoints,
+      tiebreak: this.tiebreak,
+      matchWinner: this.matchWinner,
+      servingRotation: this.servingRotation,
+      currentServerId: this.currentServerId,
+      setScores: this.setScores,
+      gameScores: this.gameScores,
+      pointScores: this.pointScores,
+      stats: Array.from(this.statsManager.getAllStats().entries()),
+    };
+  }
+
+  /**
+   * Creates a match from JSON data.
    */
   static fromJSON(
     data: any,
     saveCallback?: (match: TennisMatch) => void
   ): TennisMatch {
-    let match: TennisMatch;
+    // Create match with basic config
+    const match = new TennisMatch(
+      data.participants[1].name,
+      data.participants[2].name,
+      data.config.format.sets,
+      saveCallback
+    );
 
-    // Handle version migration
-    if (!data.matchType) {
-      // Old format - assume singles
-      data.matchType = "singles";
+    // Restore state
+    match.config = data.config;
+    match.participants = data.participants;
+    match.currentSet = data.currentSet;
+    match.currentGame = data.currentGame;
+    match.setHistory = data.setHistory;
+    match.currentSetGames = data.currentSetGames;
+    match.currentGamePoints = data.currentGamePoints;
+    match.tiebreak = data.tiebreak;
+    match.matchWinner = data.matchWinner;
+    match.servingRotation = data.servingRotation;
+    match.currentServerId = data.currentServerId;
+    match.setScores = data.setScores;
+    match.gameScores = data.gameScores;
+    match.pointScores = data.pointScores;
+
+    // Restore statistics
+    if (data.stats) {
+      const statsMap = new Map(data.stats);
+      // Would need to implement a restore method in StatisticsManager
     }
 
-    if (data.matchType === "singles") {
-      match = new TennisMatch(
-        data.player[1],
-        data.player[2],
-        data.numSets,
-        saveCallback
-      );
-    } else {
-      // Doubles match
-      const team1Names = data.teams[1].players.map((p: Player) => p.name);
-      const team2Names = data.teams[2].players.map((p: Player) => p.name);
-      match = new TennisMatch(
-        team1Names as [string, string],
-        team2Names as [string, string],
-        data.numSets,
-        saveCallback
-      );
-      match.currentServerIndex = data.currentServerIndex;
-    }
-
-    match.score = data.score;
-    match.winner = data.winner;
-    match.sets = data.sets.map((s: any) => Set.fromJSON(s));
-    match.set = Set.fromJSON(data.set);
     return match;
   }
 
   /**
    * Loads a match from storage.
-   * @param loader An optional function to load the match JSON. Defaults to reading from localStorage.
-   * @param saveCallback An optional callback function to persist the match state on the loaded match.
-   * @returns A TennisMatch instance or null if no saved data is found.
    */
   static load(
     loader?: () => string | null,
     saveCallback?: (match: TennisMatch) => void
   ): TennisMatch | null {
-    let savedMatchJSON: string | null;
+    let savedData: string | null;
 
     if (loader) {
-      savedMatchJSON = loader();
+      savedData = loader();
     } else if (typeof localStorage !== "undefined") {
-      savedMatchJSON = localStorage.getItem("tennisMatch");
+      savedData = localStorage.getItem("unifiedTennisMatch");
     } else {
       return null;
     }
 
-    if (!savedMatchJSON) {
+    if (!savedData) {
       return null;
     }
 
-    const plainMatch = JSON.parse(savedMatchJSON);
-    return TennisMatch.fromJSON(plainMatch, saveCallback);
-  }
-
-  /**
-   * Generates a string representation of the match score.
-   * @param server The player/team whose perspective the score should be from.
-   * @returns A comma-separated string of set scores.
-   */
-  matchScore(server: PlayerNum | Player): string {
-    let serverNum: PlayerNum;
-    let receiverNum: PlayerNum;
-
-    if (typeof server === "number") {
-      serverNum = server;
-      receiverNum = server === 1 ? 2 : 1;
-    } else {
-      // Doubles - use team numbers
-      serverNum = server.team;
-      receiverNum = server.team === 1 ? 2 : 1;
-    }
-    const score: string[] = [];
-
-    this.sets.forEach((theSet) => {
-      let sc = `${theSet.score[serverNum]}-${theSet.score[receiverNum]}`;
-      if (theSet.tiebreak && theSet.winner) {
-        // Only show tiebreak score if set is complete
-        sc += `(${theSet.tiebreak.score[1] > theSet.tiebreak.score[2] ? theSet.tiebreak.score[2] : theSet.tiebreak.score[1]})`;
-      }
-      score.push(sc);
-    });
-
-    if (!this.winner) {
-      score.push(`${this.set.score[serverNum]}-${this.set.score[receiverNum]}`);
-    }
-
-    return score.join(", ");
-  }
-
-  /**
-   * Gets the current server for the match.
-   * @returns The current server (PlayerNum for singles, Player for doubles).
-   */
-  getCurrentServer(): PlayerNum | Player {
-    if (this.matchType === "singles") {
-      if (this.set.tiebreak) {
-        return this.set.tiebreak.server as PlayerNum;
-      }
-      return this.set.game.server as PlayerNum;
-    } else {
-      if (this.set.tiebreak) {
-        return this.set.tiebreak.server as Player;
-      }
-      return this.set.game.server as Player;
-    }
-  }
-
-  /**
-   * Helper method to get individual player statistics for doubles.
-   * @param team The team number.
-   * @param position The player position.
-   * @returns The player's statistics.
-   */
-  private getPlayerStats(
-    team: TeamNum,
-    position: PlayerPosition
-  ): DoublesPlayerStats {
-    const player = this.teams![team].players.find(
-      (p) => p.position === position
-    )!;
-    const stats: DoublesPlayerStats = {
-      team,
-      position,
-      name: player.name,
-      stats: {
-        pointsWon: 0,
-        pointsPlayed: 0,
-        servingStats: {
-          aces: 0,
-          doubleFaults: 0,
-          serviceWinners: 0,
-          firstServeIn: 0,
-          firstServeTotal: 0,
-          pointsWonOnServe: 0,
-          serviceGamesPlayed: 0,
-        },
-        returningStats: {
-          returnWinners: 0,
-          returnErrors: 0,
-          breakPointsWon: 0,
-          breakPointsPlayed: 0,
-        },
-        rallyStats: {
-          winners: 0,
-          unforcedErrors: 0,
-        },
-      },
-    };
-
-    // Collect all points
-    const allPoints: Point[] = [];
-    for (const s of this.sets) {
-      for (const g of s.games) {
-        allPoints.push(...g.points);
-      }
-      if (s.tiebreak) {
-        allPoints.push(...s.tiebreak.points);
-      }
-    }
-    for (const g of this.set.games) {
-      allPoints.push(...g.points);
-    }
-    if (this.set.tiebreak) {
-      allPoints.push(...this.set.tiebreak.points);
-    } else {
-      allPoints.push(...this.set.game.points);
-    }
-
-    // Process points for this specific player
-    for (const point of allPoints) {
-      if (
-        point.scoringPlayer &&
-        typeof point.scoringPlayer === "object" &&
-        point.scoringPlayer.team === team &&
-        point.scoringPlayer.position === position
-      ) {
-        stats.stats.pointsPlayed++;
-        if (point.winner === team) {
-          stats.stats.pointsWon++;
-        }
-
-        // Track specific stats based on point outcome
-        const server = point.server as Player;
-        if (server && server.team === team && server.position === position) {
-          // This player was serving
-          if (point.how === PointOutcomes.ACE) {
-            stats.stats.servingStats.aces++;
-          } else if (point.how === PointOutcomes.DOUBLE_FAULT) {
-            stats.stats.servingStats.doubleFaults++;
-          } else if (point.how === PointOutcomes.SERVICE_WINNER) {
-            stats.stats.servingStats.serviceWinners++;
-          }
-        } else {
-          // This player was returning or in rally
-          if (point.how === PointOutcomes.RETURN_WINNER) {
-            stats.stats.returningStats.returnWinners++;
-          } else if (point.how === PointOutcomes.WINNER) {
-            stats.stats.rallyStats.winners++;
-          } else if (point.how === PointOutcomes.UNFORCED_ERROR) {
-            stats.stats.rallyStats.unforcedErrors++;
-          }
-        }
-      }
-    }
-
-    return stats;
-  }
-
-  /**
-   * Generates a detailed summary object of the current match state, including scores, server, and player statistics.
-   * @returns A MatchSummary object.
-   */
-  matchSummary(): MatchSummary {
-    if (this.matchType === "singles") {
-      // Singles match summary
-      let curObj: Game | TieBreak | null = this.set.game;
-      if (this.set.tiebreak) {
-        curObj = this.set.tiebreak;
-      }
-
-      // This can happen if a point is undone at the boundary of a tiebreak
-      if (!curObj) {
-        curObj = this.set.game;
-      }
-
-      const receiver: PlayerNum = (curObj.server as PlayerNum) === 1 ? 2 : 1;
-
-      const stats: {
-        1: { [key: string]: number };
-        2: { [key: string]: number };
-      } = {
-        1: {},
-        2: {},
-      };
-      Object.keys(PointOutcomes)
-        .filter((key) => isNaN(Number(key)) && key !== "FAULT")
-        .forEach((key) => {
-          const lowerKey = key.toLowerCase();
-          stats[1][lowerKey] = 0;
-          stats[2][lowerKey] = 0;
-        });
-
-      const allPoints: Point[] = [];
-
-      // Process completed sets
-      for (const s of this.sets) {
-        for (const g of s.games) {
-          allPoints.push(...g.points);
-        }
-        if (s.tiebreak) {
-          allPoints.push(...s.tiebreak.points);
-        }
-      }
-
-      // Process current set
-      for (const g of this.set.games) {
-        allPoints.push(...g.points);
-      }
-      if (this.set.tiebreak) {
-        allPoints.push(...this.set.tiebreak.points);
-      } else {
-        allPoints.push(...this.set.game.points);
-      }
-
-      // Process all collated points
-      for (const point of allPoints) {
-        const key = PointOutcomes[point.how].toLowerCase();
-        if (key !== "fault") {
-          stats[point.winner as PlayerNum][key]++;
-        }
-      }
-
-      const summary: MatchSummary = {
-        meta: {
-          type: this.set.tiebreak ? "Tiebreak" : "Game",
-          matchType: "singles",
-          tiebreakActive: !!this.set.tiebreak,
-          server: curObj.server as PlayerNum,
-          receiver,
-          player: {
-            1: this.player![1],
-            2: this.player![2],
-          },
-          numSets: this.numSets,
-        },
-        player1: {
-          sets: this.score[1],
-          games: this.set.score[1],
-          points: this.set.tiebreak
-            ? this.set.tiebreak.score[1]
-            : this.set.game.score[1],
-          stats: stats[1],
-        },
-        player2: {
-          sets: this.score[2],
-          games: this.set.score[2],
-          points: this.set.tiebreak
-            ? this.set.tiebreak.score[2]
-            : this.set.game.score[2],
-          stats: stats[2],
-        },
-        matchScore: "",
-      };
-
-      if (this.winner) {
-        summary.winner = this.winner;
-        summary.matchScore = this.matchScore(this.winner as PlayerNum);
-      } else {
-        summary.matchScore = this.matchScore(curObj.server as PlayerNum);
-      }
-
-      return summary;
-    } else {
-      // Doubles match summary
-      const currentServer = this.getCurrentServer() as Player;
-
-      const summary: MatchSummary = {
-        meta: {
-          type: this.set.tiebreak ? "Tiebreak" : "Game",
-          matchType: "doubles",
-          tiebreakActive: !!this.set.tiebreak,
-          currentServer,
-          teams: this.teams,
-          servingRotation: this.servingRotation,
-          numSets: this.numSets,
-        },
-        team1: {
-          sets: this.score[1],
-          games: this.set.score[1],
-          points: this.set.tiebreak
-            ? this.set.tiebreak.score[1]
-            : this.set.game.score[1],
-          players: {
-            A: this.getPlayerStats(1, "A"),
-            B: this.getPlayerStats(1, "B"),
-          },
-        },
-        team2: {
-          sets: this.score[2],
-          games: this.set.score[2],
-          points: this.set.tiebreak
-            ? this.set.tiebreak.score[2]
-            : this.set.game.score[2],
-          players: {
-            A: this.getPlayerStats(2, "A"),
-            B: this.getPlayerStats(2, "B"),
-          },
-        },
-        matchScore: "",
-      };
-
-      if (this.winner) {
-        summary.winner = this.winner;
-        summary.matchScore = this.matchScore(currentServer);
-      } else {
-        summary.matchScore = this.matchScore(currentServer);
-      }
-
-      return summary;
-    }
-  }
-
-  /**
-   * Returns a simplified score object for the current match state.
-   * @returns A simplified score object.
-   */
-  public getScore(): SimpleScore {
-    let server = this.set.game.server;
-    if (this.set.tiebreak) {
-      server = this.set.tiebreak.server;
-    }
-
-    if (this.matchType === "singles") {
-      return {
-        matchType: "singles",
-        player1: {
-          sets: this.score[1],
-          games: this.set.score[1],
-          points: this.set.tiebreak
-            ? this.set.tiebreak.score[1]
-            : this.set.game.score[1],
-        },
-        player2: {
-          sets: this.score[2],
-          games: this.set.score[2],
-          points: this.set.tiebreak
-            ? this.set.tiebreak.score[2]
-            : this.set.game.score[2],
-        },
-        server: server,
-        winner: this.winner,
-      };
-    } else {
-      return {
-        matchType: "doubles",
-        team1: {
-          sets: this.score[1],
-          games: this.set.score[1],
-          points: this.set.tiebreak
-            ? this.set.tiebreak.score[1]
-            : this.set.game.score[1],
-        },
-        team2: {
-          sets: this.score[2],
-          games: this.set.score[2],
-          points: this.set.tiebreak
-            ? this.set.tiebreak.score[2]
-            : this.set.game.score[2],
-        },
-        server: server,
-        winner: this.winner,
-      };
-    }
+    const data = JSON.parse(savedData);
+    return TennisMatch.fromJSON(data, saveCallback);
   }
 }
