@@ -1,19 +1,19 @@
-import { TennisMatch, PointOutcomes } from "../src";
+import { LegacyTennisMatch, PointOutcomes } from "../src";
 
 describe("Match Completion and Undo/Redo at Match Boundary", () => {
-  let match: TennisMatch;
+  let match: LegacyTennisMatch;
 
   beforeEach(() => {
-    match = new TennisMatch("Player A", "Player B", 3);
+    match = new LegacyTennisMatch("Player A", "Player B", 3);
   });
 
-  const winGame = (matchInstance: TennisMatch, player: 1 | 2) => {
+  const winGame = (matchInstance: LegacyTennisMatch, player: 1 | 2) => {
     for (let i = 0; i < 4; i++) {
       matchInstance.scorePoint(player);
     }
   };
 
-  const winSet = (matchInstance: TennisMatch, player: 1 | 2) => {
+  const winSet = (matchInstance: LegacyTennisMatch, player: 1 | 2) => {
     for (let i = 0; i < 6; i++) {
       winGame(matchInstance, player);
     }
@@ -78,7 +78,7 @@ describe("Match Completion and Undo/Redo at Match Boundary", () => {
   it("should correctly save and load a match", () => {
     let savedState: string | null = null;
 
-    const customSaver = (matchToSave: TennisMatch) => {
+    const customSaver = (matchToSave: LegacyTennisMatch) => {
       const replacer = (key: string, value: any) => {
         if (key === "saveCallback") return undefined;
         return value;
@@ -91,7 +91,7 @@ describe("Match Completion and Undo/Redo at Match Boundary", () => {
     };
 
     // Start a match with a custom saver
-    const originalMatch = new TennisMatch("Chris", "Pete", 3, customSaver);
+    const originalMatch = new LegacyTennisMatch("Chris", "Pete", 3, customSaver);
 
     // Play a bit
     winGame(originalMatch, 1); // P1 wins game
@@ -107,7 +107,7 @@ describe("Match Completion and Undo/Redo at Match Boundary", () => {
     expect(savedState).not.toBeNull();
 
     // Now, load a new match from the saved state
-    const loadedMatch = TennisMatch.load(customLoader, customSaver);
+    const loadedMatch = LegacyTennisMatch.load(customLoader, customSaver);
     expect(loadedMatch).not.toBeNull();
 
     if (loadedMatch) {

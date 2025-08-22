@@ -1,6 +1,6 @@
-import { TennisMatch, PointOutcomes } from "../src";
+import { LegacyTennisMatch, PointOutcomes } from "../src";
 
-const match = new TennisMatch("Jim", "Andre", 3);
+const match = new LegacyTennisMatch("Jim", "Andre", 3);
 
 const howCache = {
   player1: {},
