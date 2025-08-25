@@ -179,11 +179,17 @@ export function updateStats(
       break;
 
     case PointOutcome.UnforcedError:
-      updated.rally.unforcedErrors++;
+      // Attribute unforced errors to the losing side only
+      if (!won) {
+        updated.rally.unforcedErrors++;
+      }
       break;
 
     case PointOutcome.ForcedError:
-      updated.rally.forcedErrors++;
+      // Attribute forced errors to the winning side only
+      if (won) {
+        updated.rally.forcedErrors++;
+      }
       break;
   }
 
