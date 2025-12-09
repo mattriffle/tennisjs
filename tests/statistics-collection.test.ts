@@ -176,8 +176,8 @@ describe("Statistics Collection", () => {
       expect(t1.serving.doubleFaults).toBe(1);
       expect(t1.serving.secondServeTotal).toBe(1);
 
-      // Current implementation does not track losing player's individual fault
-      expect(t1.playerStats[aId].serving.doubleFaults).toBe(0);
+      // Current implementation tracks losing player's individual fault
+      expect(t1.playerStats[aId].serving.doubleFaults).toBe(1);
     });
 
     it("attributes individual rally winners per scorerId", () => {

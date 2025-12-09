@@ -10,10 +10,18 @@ import {
   AnyParticipant,
   isDoublesTeam,
   TeamPlayerPosition,
-} from "./unified-types.js";
+} from "./types.js";
 
 /**
- * Creates an empty statistics object.
+ * Creates an empty statistics object with all counters initialized to zero.
+ *
+ * @returns A new ParticipantStatistics object with serving, returning, and rally stats
+ *
+ * @example
+ * ```typescript
+ * const stats = createEmptyStats();
+ * console.log(stats.serving.aces); // 0
+ * ```
  */
 export function createEmptyStats(): ParticipantStatistics {
   return {
@@ -62,7 +70,15 @@ export function createEmptyStats(): ParticipantStatistics {
 }
 
 /**
- * Creates empty team statistics.
+ * Creates empty team statistics with aggregate and per-player tracking.
+ *
+ * @returns A new TeamStatistics object extending ParticipantStatistics with playerStats map
+ *
+ * @example
+ * ```typescript
+ * const teamStats = createEmptyTeamStats();
+ * teamStats.playerStats['player-1'] = createEmptyStats();
+ * ```
  */
 export function createEmptyTeamStats(): TeamStatistics {
   return {
@@ -73,6 +89,22 @@ export function createEmptyTeamStats(): TeamStatistics {
 
 /**
  * Updates statistics based on a point outcome.
+ *
+ * Handles all point types including aces, double faults, winners, and errors.
+ * Returns a new statistics object without mutating the input.
+ *
+ * @param stats - Current statistics to update
+ * @param outcome - Type of point outcome (Ace, Winner, DoubleFault, etc.)
+ * @param won - Whether this participant won the point
+ * @param isServing - Whether this participant was serving
+ * @param isFirstServe - Whether this was a first serve (optional)
+ * @returns Updated statistics object
+ *
+ * @example
+ * ```typescript
+ * const updated = updateStats(stats, PointOutcome.Ace, true, true, true);
+ * console.log(updated.serving.aces); // stats.serving.aces + 1
+ * ```
  */
 export function updateStats(
   stats: ParticipantStatistics,
@@ -175,7 +207,9 @@ export function updateStats(
   // Rally statistics (applicable to both serving and returning)
   switch (outcome) {
     case PointOutcome.Winner:
-      updated.rally.winners++;
+      if (won) {
+        updated.rally.winners++;
+      }
       break;
 
     case PointOutcome.UnforcedError:
@@ -198,6 +232,16 @@ export function updateStats(
 
 /**
  * Updates team statistics with individual player contribution.
+ *
+ * Updates both the team aggregate stats and the specific player's stats.
+ *
+ * @param teamStats - Current team statistics
+ * @param playerId - ID of the player who scored
+ * @param outcome - Type of point outcome
+ * @param won - Whether the team won the point
+ * @param isServing - Whether the team was serving
+ * @param isFirstServe - Whether this was a first serve
+ * @returns Updated team statistics object
  */
 export function updateTeamStats(
   teamStats: TeamStatistics,
@@ -236,7 +280,12 @@ export function updateTeamStats(
 }
 
 /**
- * Aggregates multiple statistics objects into one.
+ * Aggregates multiple statistics objects into one combined total.
+ *
+ * Sums all serving, returning, and rally statistics across all inputs.
+ *
+ * @param stats - Array of statistics objects to aggregate
+ * @returns Single combined statistics object
  */
 export function aggregateStats(
   stats: ParticipantStatistics[]
@@ -299,6 +348,13 @@ export function aggregateStats(
 
 /**
  * Merges partial statistics into a base statistics object.
+ *
+ * Creates a deep copy of the base stats and applies the updates.
+ * Useful for combining stats from different sources or applying specific overrides.
+ *
+ * @param base - The base statistics object to start from
+ * @param update - Partial statistics to apply to the base
+ * @returns A new ParticipantStatistics object with merged values
  */
 export function mergeStats(
   base: ParticipantStatistics,
@@ -326,7 +382,13 @@ export function mergeStats(
 }
 
 /**
- * Calculates percentage statistics.
+ * Calculates percentage statistics from raw counts.
+ *
+ * Computes common tennis statistics like first serve %, break point save %, etc.
+ * Returns 0 for any percentage where the denominator is zero.
+ *
+ * @param stats - Statistics object with raw counts
+ * @returns Object with calculated percentage values
  */
 export function calculatePercentages(stats: ParticipantStatistics): {
   winPercentage: number;
@@ -381,6 +443,14 @@ export function calculatePercentages(stats: ParticipantStatistics): {
 
 /**
  * Compares two statistics objects and returns the difference.
+ *
+ * Calculates stats1 - stats2 for all numeric fields.
+ * Useful for determining statistics over a specific period (e.g. current set)
+ * by subtracting start-of-period stats from current stats.
+ *
+ * @param stats1 - The "current" or "end" statistics
+ * @param stats2 - The "baseline" or "start" statistics to subtract
+ * @returns A new stats object where values are stats1 - stats2
  */
 export function compareStats(
   stats1: ParticipantStatistics,
@@ -482,7 +552,18 @@ export const statisticsFactory: StatisticsFactory = {
 };
 
 /**
- * Statistics manager class for tracking match statistics.
+ * Manager class for tracking and updating match statistics.
+ *
+ * Handles statistics for both singles and doubles matches, tracking
+ * aggregate team stats and individual player contributions in doubles.
+ *
+ * @example
+ * ```typescript
+ * const manager = new StatisticsManager();
+ * manager.initializeParticipants(participants);
+ * manager.recordPoint(winnerId, loserId, outcome, serverId);
+ * const stats = manager.getStats(participantId);
+ * ```
  */
 export class StatisticsManager {
   private participantStats: Map<string, ParticipantStatistics | TeamStatistics>;
@@ -492,7 +573,12 @@ export class StatisticsManager {
   }
 
   /**
-   * Initializes statistics for participants.
+   * Initializes statistics tracking for match participants.
+   *
+   * Creates empty stats for each participant. For doubles teams,
+   * also initializes individual player stats within the team.
+   *
+   * @param participants - Object containing participants at positions 1 and 2
    */
   initializeParticipants(participants: {
     1: AnyParticipant;
@@ -514,7 +600,18 @@ export class StatisticsManager {
   }
 
   /**
-   * Records a point.
+   * Records a point outcome and updates all relevant statistics.
+   *
+   * Updates stats for both winner and loser, handling serving/receiving specific
+   * metrics, and managing individual stats in doubles matches if scorerId/serverId
+   * are provided for team members.
+   *
+   * @param winnerId - ID of the participant (player/team) who won the point
+   * @param loserId - ID of the participant (player/team) who lost the point
+   * @param outcome - The classification of the point (Ace, Winner, Error, etc.)
+   * @param serverId - ID of the specific player who was serving
+   * @param scorerId - ID of the specific player who hit the winner/error (optional)
+   * @param isFirstServe - Whether the point was played on a first serve (optional)
    */
   recordPoint(
     winnerId: string,
@@ -558,15 +655,41 @@ export class StatisticsManager {
       const isServing =
         serverId === loserId || this.isPlayerServing(loserId, serverId);
 
-      this.participantStats.set(
-        loserId,
-        updateStats(loserStats, outcome, false, isServing, isFirstServe)
-      );
+      // For unforced errors, the scorerId is the ID of the player who made the error.
+      // For double faults, the serverId is the ID of the player who made the error.
+      const attributionId =
+        outcome === PointOutcome.UnforcedError
+          ? scorerId
+          : outcome === PointOutcome.DoubleFault
+            ? serverId
+            : undefined;
+
+      if (attributionId && "playerStats" in loserStats) {
+        this.participantStats.set(
+          loserId,
+          updateTeamStats(
+            loserStats as TeamStatistics,
+            attributionId,
+            outcome,
+            false,
+            isServing,
+            isFirstServe
+          )
+        );
+      } else {
+        this.participantStats.set(
+          loserId,
+          updateStats(loserStats, outcome, false, isServing, isFirstServe)
+        );
+      }
     }
   }
 
   /**
    * Gets statistics for a participant.
+   *
+   * @param participantId - ID of the participant to retrieve stats for
+   * @returns The statistics object or undefined if not found
    */
   getStats(
     participantId: string
@@ -598,5 +721,100 @@ export class StatisticsManager {
       return serverId in stats.playerStats;
     }
     return false;
+  }
+
+  /**
+   * Restores statistics from a map.
+   */
+  restore(stats: Map<string, ParticipantStatistics | TeamStatistics>): void {
+    this.participantStats = new Map(stats);
+  }
+
+  /**
+   * Records a service game outcome.
+   *
+   * Updates "Service Games Played" and "Service Games Won" for the server
+   * (and their team if applicable).
+   *
+   * @param serverId - ID of the player who served the game
+   * @param won - Whether the server won the game (held serve)
+   */
+  recordServiceGame(serverId: string, won: boolean): void {
+    for (const [id, stats] of this.participantStats.entries()) {
+      const isServing = id === serverId || this.isPlayerServing(id, serverId);
+
+      if (isServing) {
+        if ("playerStats" in stats && id !== serverId) {
+          const teamStats = deepClone(stats) as TeamStatistics;
+          teamStats.serving.serviceGamesPlayed++;
+          if (won) teamStats.serving.serviceGamesWon++;
+
+          if (teamStats.playerStats[serverId]) {
+            teamStats.playerStats[serverId].serving.serviceGamesPlayed++;
+            if (won) teamStats.playerStats[serverId].serving.serviceGamesWon++;
+          }
+
+          this.participantStats.set(id, teamStats);
+        } else {
+          const updated = deepClone(stats);
+          updated.serving.serviceGamesPlayed++;
+          if (won) updated.serving.serviceGamesWon++;
+          this.participantStats.set(id, updated);
+        }
+        return;
+      }
+    }
+  }
+
+  /**
+   * Records a break point opportunity results.
+   *
+   * Updates "Break Points Faced" and "Break Points Saved" for the server,
+   * and "Break Points Played" and "Break Points Won" for the receiver.
+   *
+   * @param serverId - ID of the player serving the break point
+   * @param receiverId - ID of the player/team receiving
+   * @param outcome - Outcome of the point
+   * @param winnerId - ID of the point winner
+   */
+  recordBreakPoint(
+    serverId: string,
+    receiverId: string,
+    outcome: PointOutcome,
+    winnerId: string
+  ): void {
+    const serverWon =
+      winnerId === serverId || this.isPlayerServing(winnerId, serverId);
+
+    const serverParticipantId = this.findParticipantId(serverId);
+    if (serverParticipantId) {
+      const stats = this.participantStats.get(serverParticipantId)!;
+      const updated = deepClone(stats);
+      updated.serving.breakPointsFaced++;
+      if (serverWon) updated.serving.breakPointsSaved++;
+      this.participantStats.set(serverParticipantId, updated);
+    }
+
+    const receiverParticipantId = this.findParticipantId(receiverId);
+    if (receiverParticipantId) {
+      const stats = this.participantStats.get(receiverParticipantId)!;
+      const updated = deepClone(stats);
+      updated.returning.breakPointsPlayed++;
+      if (!serverWon) updated.returning.breakPointsWon++;
+      this.participantStats.set(receiverParticipantId, updated);
+    }
+  }
+
+  /**
+   * Finds the main participant ID for a given player/team ID.
+   */
+  private findParticipantId(id: string): string | undefined {
+    if (this.participantStats.has(id)) return id;
+    for (const [pId, stats] of this.participantStats.entries()) {
+      if ("playerStats" in stats && id in stats.playerStats) {
+        return pId;
+      }
+    }
+    return undefined;
   }
 }
