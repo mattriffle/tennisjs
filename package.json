@@ -1,6 +1,6 @@
 {
   "name": "tennisjs",
-  "version": "3.0.0",
+  "version": "3.0.1",
   "description": "A TypeScript tennis scoring library.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
