@@ -12,7 +12,7 @@ import {
   ParticipantPosition,
   ParticipantFactory,
   TeamPlayerPosition,
-} from "./unified-types.js";
+} from "./types.js";
 
 /**
  * Generates a unique ID for a participant.
@@ -25,6 +25,15 @@ function generateId(prefix: string): string {
 
 /**
  * Creates a singles player participant.
+ *
+ * @param config - Player configuration with name and optional ID
+ * @param position - Match position (1 or 2)
+ * @returns SinglesPlayer object
+ *
+ * @example
+ * ```typescript
+ * const player = createSinglesPlayer({ name: "Roger Federer" }, 1);
+ * ```
  */
 export function createSinglesPlayer(
   config: SinglesPlayerConfig,
@@ -54,6 +63,17 @@ function createTeamPlayer(
 
 /**
  * Creates a doubles team participant.
+ *
+ * @param config - Team configuration with player configs
+ * @param position - Match position (1 or 2)
+ * @returns DoublesTeam object with two TeamPlayers
+ *
+ * @example
+ * ```typescript
+ * const team = createDoublesTeam({
+ *   players: { a: { name: "Bob" }, b: { name: "Mike" } }
+ * }, 1);
+ * ```
  */
 export function createDoublesTeam(
   config: DoublesTeamConfig,
@@ -72,68 +92,6 @@ export function createDoublesTeam(
       b: createTeamPlayer(config.players.b, "b"),
     },
   };
-}
-
-/**
- * Creates a participant from legacy data format.
- */
-export function createFromLegacy(
-  data: any,
-  position: ParticipantPosition
-): AnyParticipant {
-  // Handle singles player
-  if (typeof data === "string") {
-    return createSinglesPlayer({ name: data }, position);
-  }
-
-  // Handle doubles team (array of names)
-  if (Array.isArray(data) && data.length === 2) {
-    return createDoublesTeam(
-      {
-        players: {
-          a: { name: data[0] },
-          b: { name: data[1] },
-        },
-      },
-      position
-    );
-  }
-
-  // Handle legacy player object
-  if (data.name && !data.players) {
-    return createSinglesPlayer(
-      {
-        name: data.name,
-        id: data.id,
-      },
-      position
-    );
-  }
-
-  // Handle legacy team object
-  if (data.players && Array.isArray(data.players)) {
-    return createDoublesTeam(
-      {
-        name: data.name,
-        id: data.id,
-        players: {
-          a: {
-            name: data.players[0].name || data.players[0],
-            id: data.players[0].id,
-          },
-          b: {
-            name: data.players[1].name || data.players[1],
-            id: data.players[1].id,
-          },
-        },
-      },
-      position
-    );
-  }
-
-  throw new Error(
-    `Unable to create participant from legacy data: ${JSON.stringify(data)}`
-  );
 }
 
 /**
@@ -208,7 +166,19 @@ export function areParticipantsEqual(
 }
 
 /**
- * Creates a serving rotation for doubles.
+ * Creates a serving rotation for doubles matches.
+ *
+ * Standard rotation alternates between teams: T1A → T2A → T1B → T2B.
+ *
+ * @param team1 - First team
+ * @param team2 - Second team
+ * @param firstServer - Which player serves first (team and position)
+ * @returns Array of player IDs in serving order
+ *
+ * @example
+ * ```typescript
+ * const rotation = createServingRotation(team1, team2, { team: 1, player: 'a' });
+ * ```
  */
 export function createServingRotation(
   team1: DoublesTeam,
@@ -284,15 +254,25 @@ export function validateParticipantConfig(
 export const participantFactory: ParticipantFactory = {
   createSinglesPlayer,
   createDoublesTeam,
-  createFromLegacy: (data: any) => {
-    // Attempt to determine position from data
-    const position = data.position || 1;
-    return createFromLegacy(data, position as ParticipantPosition);
-  },
 };
 
 /**
- * Helper to create participants for a match.
+ * Creates participants for a match from flexible input types.
+ *
+ * Accepts strings, arrays, or full config objects for both singles and doubles.
+ *
+ * @param participant1 - First participant (name, [names], or config)
+ * @param participant2 - Second participant (name, [names], or config)
+ * @returns Object with participants at positions 1 and 2
+ * @throws Error if participant types don't match (mixing singles/doubles)
+ *
+ * @example
+ * ```typescript
+ * // Singles
+ * createMatchParticipants("Roger", "Rafael");
+ * // Doubles
+ * createMatchParticipants(["Bob", "Mike"], ["John", "Henri"]);
+ * ```
  */
 export function createMatchParticipants(
   participant1:
@@ -306,7 +286,7 @@ export function createMatchParticipants(
     | SinglesPlayerConfig
     | DoublesTeamConfig
 ): { 1: AnyParticipant; 2: AnyParticipant } {
-  const participants: { 1: AnyParticipant; 2: AnyParticipant } = {} as any;
+  const participants = {} as { 1: AnyParticipant; 2: AnyParticipant };
 
   // Handle participant 1
   if (typeof participant1 === "string") {

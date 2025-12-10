@@ -212,46 +212,6 @@ describe("TennisMatch", () => {
     });
   });
 
-  describe("Backward Compatibility", () => {
-    it("should provide legacy format through adapter", () => {
-      const match = new TennisMatch("Player 1", "Player 2", 3);
-
-      // Score some points
-      match.scorePoint(1);
-      match.scorePoint(1);
-
-      // Get legacy format
-      const legacyScore = match.getScore();
-      expect(legacyScore.player1).toBeDefined();
-      expect(legacyScore.player2).toBeDefined();
-      expect(legacyScore.player1.points).toBe(30);
-
-      const legacySummary = match.matchSummary();
-      expect(legacySummary.player1).toBeDefined();
-      expect(legacySummary.player2).toBeDefined();
-      expect(legacySummary.meta.matchType).toBe("singles");
-    });
-
-    it("should provide legacy doubles format", () => {
-      const match = new TennisMatch(
-        ["Team1 Player1", "Team1 Player2"],
-        ["Team2 Player1", "Team2 Player2"],
-        3
-      );
-
-      match.scorePoint(1);
-
-      const legacyScore = match.getScore();
-      expect(legacyScore.team1).toBeDefined();
-      expect(legacyScore.team2).toBeDefined();
-
-      const legacySummary = match.matchSummary();
-      expect(legacySummary.team1).toBeDefined();
-      expect(legacySummary.team2).toBeDefined();
-      expect(legacySummary.meta.matchType).toBe("doubles");
-    });
-  });
-
   describe("Serialization", () => {
     it("should serialize and deserialize correctly", () => {
       const match = new TennisMatch("Player 1", "Player 2", 3);

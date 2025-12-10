@@ -15,7 +15,13 @@ import {
   isDoublesTeam,
   isSinglesPlayer,
   TeamPlayerPosition,
-} from "./unified-types.js";
+  ParticipantStatistics,
+  TeamStatistics,
+  SerializedMatch,
+  SinglesPlayerConfig,
+  DoublesTeamConfig,
+  DoublesTeam,
+} from "./types.js";
 import {
   createMatchParticipants,
   getNextServer,
@@ -27,10 +33,26 @@ import {
   createEmptyStats,
   createEmptyTeamStats,
 } from "./statistics-aggregator.js";
-import { LegacyAdapter } from "./legacy-adapter.js";
 
 /**
  * Main class for managing a tennis match with unified singles and doubles support.
+ *
+ * Provides complete match state management including scoring, statistics tracking,
+ * undo/redo operations, and serialization. Supports both singles and doubles matches.
+ *
+ * @example
+ * ```typescript
+ * // Singles match
+ * const singles = new TennisMatch("Roger Federer", "Rafael Nadal", 3);
+ * singles.scorePoint(1, PointOutcome.Ace);
+ *
+ * // Doubles match
+ * const doubles = new TennisMatch(
+ *   ["Bob Bryan", "Mike Bryan"],
+ *   ["John Peers", "Henri Kontinen"],
+ *   3
+ * );
+ * ```
  */
 export class TennisMatch {
   private config: MatchConfig;
@@ -50,6 +72,20 @@ export class TennisMatch {
   private pointScores: [number | string, number | string];
   private saveCallback?: (match: TennisMatch) => void;
 
+  /**
+   * Creates a new tennis match.
+   *
+   * @param player1OrTeam1 - Player 1 name (singles) or [Player A, Player B] names (doubles)
+   * @param player2OrTeam2 - Player 2 name (singles) or [Player A, Player B] names (doubles)
+   * @param numSets - Number of sets to play (must be odd, default: 3)
+   * @param saveCallback - Optional callback for auto-saving match state
+   * @throws Error if numSets is even
+   *
+   * @example
+   * ```typescript
+   * const match = new TennisMatch("Player 1", "Player 2", 5);
+   * ```
+   */
   constructor(
     player1OrTeam1: string | [string, string],
     player2OrTeam2: string | [string, string],
@@ -71,8 +107,12 @@ export class TennisMatch {
     this.config = {
       matchType,
       participants: {
-        1: this.participants[1] as any,
-        2: this.participants[2] as any,
+        1: this.participants[1] as unknown as
+          | SinglesPlayerConfig
+          | DoublesTeamConfig,
+        2: this.participants[2] as unknown as
+          | SinglesPlayerConfig
+          | DoublesTeamConfig,
       },
       format: {
         sets: numSets,
@@ -98,8 +138,8 @@ export class TennisMatch {
 
     // Initialize serving
     if (matchType === "doubles") {
-      const team1 = this.participants[1] as any;
-      const team2 = this.participants[2] as any;
+      const team1 = this.participants[1] as DoublesTeam;
+      const team2 = this.participants[2] as DoublesTeam;
       this.servingRotation = createServingRotation(
         team1,
         team2,
@@ -116,11 +156,25 @@ export class TennisMatch {
 
   /**
    * Scores a point in the match.
+   *
+   * Updates the score, statistics, and checks for game/set/match completion.
+   * Automatically saves match state after scoring.
+   *
+   * @param winner - Position of the winning participant (1 or 2)
+   * @param outcome - Type of point outcome (default: Regular)
+   * @param scorerId - For doubles: ID of the specific player who scored the point
+   * @param isFirstServe - Whether this point was on first serve (default: true)
+   *
+   * @example
+   * ```typescript
+   * match.scorePoint(1, PointOutcome.Ace);
+   * match.scorePoint(2, PointOutcome.Winner);
+   * ```
    */
   scorePoint(
     winner: ParticipantPosition,
     outcome: PointOutcome = PointOutcome.Regular,
-    scorerId?: string, // For doubles: ID of the specific player who scored
+    scorerId?: string,
     isFirstServe: boolean = true
   ): void {
     if (this.matchWinner) {
@@ -139,7 +193,11 @@ export class TennisMatch {
       server: this.currentServerId,
       scorer: scorerId,
       timestamp: new Date(),
+      score: [0, 0], // Placeholder, will be updated below
     };
+
+    // Check for break point opportunity BEFORE recording the point
+    const isBP = this.checkBreakPoint();
 
     // Update statistics
     this.statsManager.recordPoint(
@@ -151,11 +209,25 @@ export class TennisMatch {
       isFirstServe
     );
 
+    if (isBP) {
+      const serverPos = this.getServerPosition();
+      const receiverPos = serverPos === 1 ? 2 : 1;
+      this.statsManager.recordBreakPoint(
+        this.currentServerId,
+        this.participants[receiverPos as ParticipantPosition].id,
+        outcome,
+        winnerId
+      );
+    }
+
     // Add point to current game
     this.currentGamePoints.push(point);
 
     // Update point score
     this.updatePointScore(winner);
+
+    // Update point summary with the new score
+    point.score = [...this.pointScores] as [number | string, number | string];
 
     // Check for game winner
     if (this.checkGameWinner()) {
@@ -250,6 +322,10 @@ export class TennisMatch {
    * Completes the current game.
    */
   private completeGame(winner: ParticipantPosition): void {
+    // Record service game stats
+    const serverWon = winner === this.getServerPosition();
+    this.statsManager.recordServiceGame(this.currentServerId, serverWon);
+
     // Determine actual game winner based on who has more points
     const scores = this.getNumericPointScores();
     const actualWinner: ParticipantPosition = scores[0] > scores[1] ? 1 : 2;
@@ -297,13 +373,39 @@ export class TennisMatch {
       if (this.gameScores[0] === 6 && this.gameScores[1] === 6) {
         this.tiebreak = true;
         this.pointScores = [0, 0];
-      } else {
-        // Rotate server for next game
-        if (!this.tiebreak) {
-          this.rotateServer();
-        }
       }
+
+      // Rotate server for next game
+      this.rotateServer();
     }
+  }
+
+  /**
+   * Checks if the current state (before point scored) is a break point.
+   */
+  private checkBreakPoint(): boolean {
+    if (this.tiebreak) return false;
+
+    const scores = this.getNumericPointScores(); // [p1, p2]
+    const serverPos = this.getServerPosition();
+    const serverIndex = serverPos - 1;
+    const receiverIndex = serverPos === 1 ? 1 : 0;
+
+    const serverScore = scores[serverIndex];
+    const receiverScore = scores[receiverIndex];
+
+    // Check if receiver winning next point wins the game
+    // Condition 1: Receiver is at 40 (3) and Server < 30 (2) ? No, Sever could be 30 (2).
+    // If Receiver=3, Server=0,1,2 -> Next point Receiver=4 -> Win. (Diff >= 2)
+    if (receiverScore === 3 && serverScore < 3) return true;
+
+    // Condition 2: Advantage Receiver
+    // If Receiver > 3 and Receiver > Server -> Advantage. Next point -> Win.
+    if (receiverScore >= 3 && receiverScore > serverScore) return true;
+
+    // Note: If 3-3 (Deuce), next point is Advantage, not Game. So not BP.
+
+    return false;
   }
 
   /**
@@ -358,19 +460,21 @@ export class TennisMatch {
     // Check for match winner
     if (this.checkMatchWinner()) {
       this.matchWinner = winner;
-    } else {
-      // Reset for next set
-      this.currentSet++;
-      this.currentGame = 1;
-      this.currentSetGames = [];
-      this.currentGamePoints = [];
-      this.gameScores = [0, 0];
-      this.pointScores = [0, 0];
-      this.tiebreak = false;
-
-      // Alternate who serves first in new set
-      this.rotateServer();
     }
+
+    // Reset for next set
+
+    // Reset for next set
+    this.currentSet++;
+    this.currentGame = 1;
+    this.currentSetGames = [];
+    this.currentGamePoints = [];
+    this.gameScores = [0, 0];
+    this.pointScores = [0, 0];
+    this.tiebreak = false;
+
+    // Alternate who serves first in new set
+    this.rotateServer();
   }
 
   /**
@@ -422,7 +526,16 @@ export class TennisMatch {
   }
 
   /**
-   * Removes the last point scored.
+   * Removes the last point scored, undoing the most recent score change.
+   *
+   * Handles undoing across game and set boundaries, restoring previous state.
+   * Statistics are not currently restored when undoing points.
+   *
+   * @example
+   * ```typescript
+   * match.scorePoint(1);  // 15-0
+   * match.removePoint();  // Back to 0-0
+   * ```
    */
   removePoint(): void {
     if (this.currentGamePoints.length === 0) {
@@ -432,6 +545,9 @@ export class TennisMatch {
         this.currentGamePoints = lastGame.points;
         this.gameScores[lastGame.winner - 1]--;
         this.currentGame--;
+
+        // Restore server
+        this.currentServerId = lastGame.server;
 
         // Restore point score from last point
         const lastPoint = this.currentGamePoints.pop();
@@ -445,6 +561,17 @@ export class TennisMatch {
         this.currentSetGames = lastSet.games;
         this.setScores[lastSet.winner - 1]--;
         this.currentSet--;
+
+        // Restore game scores
+        this.gameScores = [...lastSet.score] as [number, number];
+
+        // Restore current game number
+        this.currentGame = this.currentSetGames.length + 1;
+
+        // Restore tiebreak status
+        if (lastSet.tiebreak) {
+          this.tiebreak = true;
+        }
 
         // Restore last game of previous set
         if (this.currentSetGames.length > 0) {
@@ -492,7 +619,20 @@ export class TennisMatch {
   }
 
   /**
-   * Gets the current match summary.
+   * Gets the current match summary with all state information.
+   *
+   * Returns a comprehensive snapshot of the match including scores,
+   * statistics, set history, and serving information.
+   *
+   * @returns Complete match summary object
+   *
+   * @example
+   * ```typescript
+   * const summary = match.getMatchSummary();
+   * console.log(summary.score.sets);     // [1, 0]
+   * console.log(summary.matchScore);     // "6-4"
+   * console.log(summary.meta.status);    // "in-progress"
+   * ```
    */
   getMatchSummary(): UnifiedMatchSummary {
     return {
@@ -534,6 +674,7 @@ export class TennisMatch {
       currentSet: this.currentSet,
       currentGame: this.currentGame,
       setHistory: this.setHistory,
+      currentSetGames: this.currentSetGames,
     };
   }
 
@@ -564,22 +705,6 @@ export class TennisMatch {
   }
 
   /**
-   * Gets a simple score object (for backward compatibility).
-   */
-  getScore(): any {
-    const summary = this.getMatchSummary();
-    return LegacyAdapter.toLegacyScore(summary);
-  }
-
-  /**
-   * Gets legacy match summary (for backward compatibility).
-   */
-  matchSummary(): any {
-    const summary = this.getMatchSummary();
-    return LegacyAdapter.autoConvert(summary);
-  }
-
-  /**
    * Saves the match state.
    */
   private save(): void {
@@ -602,9 +727,19 @@ export class TennisMatch {
   }
 
   /**
-   * Converts match to JSON for serialization.
+   * Converts match state to JSON for serialization.
+   *
+   * Includes all match state necessary for full restoration.
+   *
+   * @returns JSON-serializable object containing complete match state
+   *
+   * @example
+   * ```typescript
+   * const data = match.toJSON();
+   * localStorage.setItem('match', JSON.stringify(data));
+   * ```
    */
-  toJSON(): any {
+  toJSON(): SerializedMatch {
     return {
       config: this.config,
       participants: this.participants,
@@ -625,10 +760,22 @@ export class TennisMatch {
   }
 
   /**
-   * Creates a match from JSON data.
+   * Creates a match instance from previously serialized JSON data.
+   *
+   * Restores complete match state including scores, statistics, and history.
+   *
+   * @param data - JSON data from toJSON()
+   * @param saveCallback - Optional callback for auto-saving match state
+   * @returns Restored TennisMatch instance
+   *
+   * @example
+   * ```typescript
+   * const data = JSON.parse(localStorage.getItem('match'));
+   * const match = TennisMatch.fromJSON(data);
+   * ```
    */
   static fromJSON(
-    data: any,
+    data: SerializedMatch,
     saveCallback?: (match: TennisMatch) => void
   ): TennisMatch {
     // Create match with basic config
@@ -657,8 +804,11 @@ export class TennisMatch {
 
     // Restore statistics
     if (data.stats) {
-      const statsMap = new Map(data.stats);
-      // Would need to implement a restore method in StatisticsManager
+      const statsMap = new Map(data.stats) as Map<
+        string,
+        ParticipantStatistics | TeamStatistics
+      >;
+      match.statsManager.restore(statsMap);
     }
 
     return match;
@@ -666,6 +816,21 @@ export class TennisMatch {
 
   /**
    * Loads a match from storage.
+   *
+   * Uses provided loader function or defaults to localStorage.
+   * Returns null if no saved match exists.
+   *
+   * @param loader - Optional function to retrieve saved data
+   * @param saveCallback - Optional callback for auto-saving match state
+   * @returns Loaded TennisMatch or null if not found
+   *
+   * @example
+   * ```typescript
+   * const match = TennisMatch.load();
+   * if (match) {
+   *   console.log('Resumed match:', match.getMatchSummary().matchScore);
+   * }
+   * ```
    */
   static load(
     loader?: () => string | null,

@@ -1,27 +1,7 @@
-// Legacy exports (keeping for backward compatibility)
-export { LegacyTennisMatch } from "./LegacyTennisMatch.js";
-export { Point } from "./Point.js";
-export { Game } from "./Game.js";
-export { Set } from "./Set.js";
-export { TieBreak } from "./TieBreak.js";
-export { PointOutcomes } from "./types.js";
-export type {
-  PlayerNum,
-  TeamNum,
-  PlayerPosition,
-  MatchType,
-  Player,
-  Team,
-  PlayerIdentifier,
-  ScoreObj,
-  NumericScoreObj,
-  DoublesPlayerStats,
-  MatchSummary,
-  SimpleScore,
-} from "./types.js";
-
-// New unified model exports (recommended)
+// TennisMatch - Main class for managing tennis matches
 export { TennisMatch } from "./TennisMatch.js";
+
+// Participant factory utilities
 export {
   createMatchParticipants,
   createSinglesPlayer,
@@ -30,6 +10,8 @@ export {
   getDisplayName,
   getAbbreviatedName,
 } from "./participant-factory.js";
+
+// Statistics utilities
 export {
   StatisticsManager,
   createEmptyStats,
@@ -39,13 +21,16 @@ export {
   aggregateStats,
   calculatePercentages,
 } from "./statistics-aggregator.js";
-export { LegacyAdapter } from "./legacy-adapter.js";
+
+// Type guards and enums
 export {
   PointOutcome,
   isSinglesPlayer,
   isDoublesTeam,
   isTeamStatistics,
-} from "./unified-types.js";
+} from "./types.js";
+
+// Type exports
 export type {
   // Core types
   Participant,
@@ -77,4 +62,7 @@ export type {
   // Configuration types
   SinglesPlayerConfig,
   DoublesTeamConfig,
-} from "./unified-types.js";
+
+  // Serialization types
+  SerializedMatch,
+} from "./types.js";
