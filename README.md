@@ -8,11 +8,10 @@
 
 A Typescript package for scoring tennis matches, keeping track of each point and how it was won, as well as various statistics. It provides functions enabling the front-end to use either LocalStorage API or a back-end system for persistence.
 
-**Version 2.2+ Features:**
+**Version 3.0+ Features:**
 
 - **Unified API**: Consistent interface for both singles and doubles matches
 - **Enhanced Statistics**: Comprehensive player and team statistics
-- **Legacy Compatibility**: Full backward compatibility with existing code
 - **Better TypeScript Support**: Improved type safety and developer experience
 
 ## Where can I find it?
@@ -100,73 +99,6 @@ console.log(updatedSummary.score.server.current); // Current server ID
 console.log(updatedSummary.score.server.rotation); // Current rotation order
 ```
 
-### Legacy API (Backward Compatibility)
-
-The original API is still available for existing projects. New projects should use the unified API above.
-
-#### Legacy Singles Match
-
-```javascript
-import { TennisMatch, PointOutcomes } from "tennisjs";
-
-// Create a new best-of-3 sets singles match
-const match = new TennisMatch("Player 1", "Player 2", 3);
-
-// Score a point for Player 1 (Ace)
-match.scorePoint(1, PointOutcomes.ACE);
-
-// Score a point for Player 2 (Winner)
-match.scorePoint(2, PointOutcomes.WINNER);
-
-// Get a summary of the current match state
-const summary = match.matchSummary();
-console.log(summary);
-
-// Get a simple string representation of the score
-console.log(match.matchScore(1)); // Score from Player 1's perspective
-
-// Undo the last point
-match.removePoint();
-```
-
-### Legacy Doubles Match
-
-```javascript
-import { TennisMatch, PointOutcomes } from "tennisjs";
-
-// Create a new best-of-3 sets doubles match
-const doublesMatch = new TennisMatch(
-  ["Alice", "Bob"], // Team 1
-  ["Charlie", "Diana"], // Team 2
-  3
-);
-
-// Score a point for Team 1 with individual player tracking
-doublesMatch.scorePoint(
-  1, // Team 1 wins the point
-  PointOutcomes.ACE, // It was an ace
-  0, // No faults
-  { team: 1, position: "A" } // Alice scored the ace
-);
-
-// Alternative API for doubles - more explicit
-doublesMatch.scorePointDoubles(
-  1, // Team 1 wins
-  "B", // Player B (Bob) scored
-  PointOutcomes.WINNER // It was a winner
-);
-
-// Get match summary with individual player statistics
-const summary = doublesMatch.matchSummary();
-console.log(summary.team1.players.A.stats); // Alice's individual stats
-console.log(summary.team1.players.B.stats); // Bob's individual stats
-
-// Serving rotation is handled automatically
-// Order: Team1-PlayerA → Team2-PlayerA → Team1-PlayerB → Team2-PlayerB → repeat
-const currentServer = doublesMatch.getCurrentServer();
-console.log(`Current server: ${currentServer.name}`);
-```
-
 ### Resuming a Match
 
 #### New Unified API
@@ -192,26 +124,10 @@ const customLoader = () => {
 const customMatch = TennisMatch.load(customLoader);
 ```
 
-#### Legacy API
-
-```javascript
-import { TennisMatch } from "tennisjs";
-
-const resumedMatch = TennisMatch.load();
-
-if (resumedMatch) {
-  console.log("Match resumed!", resumedMatch.matchSummary());
-} else {
-  console.log("No saved match found.");
-}
-```
-
 ### Custom Save Behavior
 
-#### New Unified API
-
 ```javascript
-import { TennisMatch } from "tennisjs";
+import { TennisMatch, PointOutcome } from "tennisjs";
 
 const customSave = (match) => {
   // Example: Send the match state to a server
@@ -224,7 +140,7 @@ const customSave = (match) => {
 
 const match = new TennisMatch("Player 1", "Player 2", 3, customSave);
 
-match.scorePoint(1);
+match.scorePoint(1, PointOutcome.Ace);
 
 // Manual save
 const json = match.toJSON();
@@ -235,118 +151,22 @@ const savedJson = JSON.parse(localStorage.getItem("myMatch") || "{}");
 const restoredMatch = TennisMatch.fromJSON(savedJson);
 ```
 
-#### Legacy API
+## Migration Guide
+
+For existing projects using the legacy API, the unified API provides backward compatibility to ensure smooth migration.
+
+### Drop-in Replacement
 
 ```javascript
+// Before (legacy API)
 import { TennisMatch } from "tennisjs";
+const match = new TennisMatch("P1", "P2", 3);
 
-const customSave = (match) => {
-  // Example: Send the match state to a server
-  // fetch('/api/save-match', {
-  //   method: 'POST',
-  //   body: JSON.stringify(match),
-  // });
-  console.log("Match state saved!", match);
-};
-
-const match = new TennisMatch("Player 1", "Player 2", 3, customSave);
-
-match.scorePoint(1);
-
-const customLoader = () => {
-  // Example: retrieve the match state from a variable or async source
-  // return mySavedMatchJSON;
-  return null;
-};
-
-const loadedMatch = TennisMatch.load(customLoader);
-```
-
-## Legacy Compatibility Features
-
-The unified API includes comprehensive backward compatibility features to ensure existing projects can continue working while gradually migrating to the new API.
-
-### Automatic Legacy Format Conversion
-
-The `TennisMatch` class provides methods that automatically convert between the new unified format and the legacy format:
-
-```javascript
-import { TennisMatch, PointOutcome } from "tennisjs";
-
-// Create a match with the new API
-const match = new TennisMatch("Player 1", "Player 2", 3);
-match.scorePoint(1, PointOutcome.Ace);
-
-// Get legacy-compatible score format
-const legacyScore = match.getScore();
-console.log(legacyScore.player1.points); // 15
-
-// Get legacy-compatible match summary
-const legacySummary = match.matchSummary();
-console.log(legacySummary.player1); // Legacy format
-
-// The new API is fully compatible with legacy expectations
-console.log(legacySummary.meta.matchType); // "singles"
-```
-
-### Legacy API Methods Available on UnifiedTennisMatch
-
-All legacy methods are available on the new `TennisMatch` class:
-
-```javascript
-const match = new TennisMatch("Player 1", "Player 2", 3);
-
-// Legacy methods work seamlessly
-match.scorePoint(1, "ACE"); // String outcomes still work
-const summary = match.matchSummary(); // Legacy format
-const score = match.getScore(); // Legacy format
-
-// New methods provide enhanced features
-const unifiedSummary = match.getMatchSummary(); // New unified format
-const json = match.toJSON(); // New serialization
-```
-
-### Migration Path
-
-#### Phase 1: Drop-in Replacement
-
-```javascript
-// Before (old API)
-import { LegacyTennisMatch } from "tennisjs";
-const match = new LegacyTennisMatch("P1", "P2", 3);
-
-// After (new API - minimal changes)
+// After (unified API - minimal changes)
 import { TennisMatch } from "tennisjs";
 const match = new TennisMatch("P1", "P2", 3);
 // All existing methods work exactly the same
 ```
-
-#### Phase 2: Enhanced Features
-
-// Gradually adopt new features
-const match = new TennisMatch("P1", "P2", 3);
-
-// Keep using legacy methods
-match.scorePoint(1, PointOutcome.Ace);
-
-// Start using new features alongside legacy
-const unifiedSummary = match.getMatchSummary(); // New format
-const legacySummary = match.matchSummary(); // Legacy format
-
-````
-
-#### Phase 3: Full Migration
-
-```javascript
-// Complete migration to new API
-import { TennisMatch, PointOutcome } from "tennisjs";
-
-const match = new TennisMatch("P1", "P2", 3);
-match.scorePoint(1, PointOutcome.Ace); // New enum
-
-const summary = match.getMatchSummary(); // New format
-const json = match.toJSON(); // New serialization
-````
 
 ### Benefits of Migrating
 
