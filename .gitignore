@@ -3,3 +3,4 @@ node_modules
 dist
 *.md
 !README.md
+!SECURITY.md
