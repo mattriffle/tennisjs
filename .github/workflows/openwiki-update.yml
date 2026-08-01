@@ -34,7 +34,7 @@ jobs:
           node-version: "22"
 
       - name: Install OpenWiki
-        run: npm install --global openwiki
+        run: npm install --min-release-age=30 --global openwiki
 
       - name: Run OpenWiki
         run: openwiki code --update --print
