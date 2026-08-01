@@ -2,5 +2,7 @@
 node_modules
 dist
 *.md
+!openwiki/*.md
+!openwiki/**/*.md
 !README.md
 !SECURITY.md
